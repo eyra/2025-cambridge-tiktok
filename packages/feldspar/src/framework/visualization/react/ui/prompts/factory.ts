@@ -25,6 +25,7 @@ import { Confirm } from './confirm'
 import { RadioInput } from './radio_input'
 import { ConsentTable } from './consent_table'
 import { DonateButtons } from './donate_buttons'
+import { ConsentForm } from './consent_form'
 
 export interface PromptContext extends ReactFactoryContext {
   onDataSubmissionDataChanged: (key: string, value: any) => void
@@ -137,6 +138,15 @@ export class DonateButtonsFactory implements PromptFactory {
   }
 }
 
+export class ConsentFormFactory implements PromptFactory {
+  create(body: unknown, context: PromptContext): JSX.Element | null {
+    if (isPropsUIPromptConsentForm(body)) {
+      return React.createElement(ConsentForm, { ...body, ...context });
+    }
+    return null;
+  }
+}
+
 export const createPromptFactoriesWithDefaults = (factories: PromptFactory[]=[]): PromptFactory[] => {
     return [
         ...factories,
@@ -145,6 +155,7 @@ export const createPromptFactoriesWithDefaults = (factories: PromptFactory[]=[])
         new ConfirmFactory(),
         new RadioInputFactory(),
         new TableFactory(),
-        new DonateButtonsFactory()
+        new DonateButtonsFactory(),
+        new ConsentFormFactory()
     ];
 }
