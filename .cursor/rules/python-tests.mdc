@@ -1,0 +1,9 @@
+---
+description: Python tests
+globs: *.py
+alwaysApply: false
+---
+Run the Python tests by:
+
+cd packages/python
+poetry run pytest

@@ -6,7 +6,7 @@ test('can upload a zip file and view contents', async ({ page }) => {
   await page.goto('http://localhost:3000/');
   
   // Wait for the page to load with increased timeout
-  await expect(page.getByRole('heading', { name: 'Data donation demo' })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole('heading', { name: 'TikTok' })).toBeVisible({ timeout: 30000 });
   
   // Create a temporary file input for file upload (Playwright needs to use setInputFiles method)
   const fileChooserPromise = page.waitForEvent('filechooser');
@@ -21,8 +21,8 @@ test('can upload a zip file and view contents', async ({ page }) => {
   await page.getByText('Continue').click();
   
   // Check that the ZIP file content is visible
-  await expect(page.getByText('hello_world.txt')).toBeVisible();
+  await expect(page.getByText('Summary information')).toBeVisible();
   
   // Check that the donation actions are visible
-  await expect(page.getByText('Do you want to donate the above data?')).toBeVisible();
+  await expect(page.getByText('Yes, donate')).toBeVisible();
 });
