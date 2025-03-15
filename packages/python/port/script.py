@@ -127,7 +127,9 @@ def cast_number(data_dict, *key_path):
 
 
 def get_activity_video_browsing_list_data(data):
-    return get_list(data, "Activity", "Video Browsing History", "VideoList")
+    return get_list(
+        data, "Activity", "Video Browsing History", "VideoList"
+    ) or get_list(data, "Your Activity", "Watch History", "VideoList")
 
 
 def get_comment_list_data(data):
@@ -136,7 +138,6 @@ def get_comment_list_data(data):
 
 def get_date_filtered_items(items):
     for item in items:
-        print(item)
         timestamp = parse_datetime(item["Date"])
         # TODO: remove this once the script is working
         # if timestamp < filter_start:
@@ -215,10 +216,20 @@ def get_json_data_from_zip(zip_file):
 def get_json_data_from_file(file_):
     # TikTok exports can be a single JSON file or a zipped JSON file
     try:
-        with open(file_) as f:
-            return [load_tiktok_data(f)]
-    except (json.decoder.JSONDecodeError, UnicodeDecodeError):
-        return get_json_data_from_zip(file_)
+        if hasattr(file_, "read"):  # If it's a file-like object
+            try:
+                return [load_tiktok_data(file_)]
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError):
+                file_.seek(0)  # Reset file pointer
+                return get_json_data_from_zip(file_)
+        else:  # If it's a file path
+            with open(file_) as f:
+                try:
+                    return [load_tiktok_data(f)]
+                except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                    return get_json_data_from_zip(file_)
+    except (IOError, json.JSONDecodeError):
+        return []
 
 
 def count_items(data, *key_path):
@@ -233,14 +244,21 @@ def filtered_count(data, *key_path):
 
 
 def get_user_name(data):
-    return get_in(data, "Profile", "Profile Information", "ProfileMap", "userName")
+    username = get_in(data, "Profile", "Profile Information", "ProfileMap", "userName")
+    if username is not None:
+        return username
+    return get_in(data, "Profile", "Profile Info", "ProfileMap", "userName")
 
 
 def get_chat_history(data):
-    return get_dict(data, "Direct Messages", "Chat History", "ChatHistory")
+    return get_dict(data, "Direct Messages", "Chat History", "ChatHistory") or get_dict(
+        data, "Direct Message", "Direct Messages", "ChatHistory"
+    )
 
 
 def flatten_chat_history(history):
+    if history is None:
+        return []
     return itertools.chain(*history.values())
 
 
@@ -289,8 +307,10 @@ def extract_summary_data(data):
             "Videos watched",
         ],
         "Number": [
-            count_items(data, "Activity", "Follower List", "FansList"),
-            count_items(data, "Activity", "Following List", "Following"),
+            count_items(data, "Activity", "Follower List", "FansList")
+            or count_items(data, "Your Activity", "Follower", "FansList"),
+            count_items(data, "Activity", "Following List", "Following")
+            or count_items(data, "Your Activity", "Following", "Following"),
             cast_number(
                 data,
                 "Profile",
@@ -298,12 +318,15 @@ def extract_summary_data(data):
                 "ProfileMap",
                 "likesReceived",
             ),
-            count_items(data, "Video", "Videos", "VideoList"),
-            count_items(data, "Activity", "Like List", "ItemFavoriteList"),
+            count_items(data, "Video", "Videos", "VideoList")
+            or count_items(data, "Post", "Posts", "VideoList"),
+            count_items(data, "Activity", "Like List", "ItemFavoriteList")
+            or count_items(data, "Your Activity", "Like List", "ItemFavoriteList"),
             count_items(data, "Comment", "Comments", "CommentsList"),
             sent_count,
             received_count,
-            count_items(data, "Activity", "Video Browsing History", "VideoList"),
+            count_items(data, "Activity", "Video Browsing History", "VideoList")
+            or count_items(data, "Your Activity", "Watch History", "VideoList"),
         ],
     }
 
@@ -328,7 +351,9 @@ def extract_videos_viewed(data):
 
     df = pd.DataFrame(videos, columns=["Date", "Link"])
     date = df["Date"].map(parse_datetime)
-    df["Timeslot"] = pd.Series() if date.empty else map_to_timeslot(date.dt.hour)
+    df["Timeslot"] = (
+        pd.Series(dtype="object") if date.empty else map_to_timeslot(date.dt.hour)
+    )
     df = df.reindex(columns=["Date", "Timeslot", "Link"])
 
     description = props.Translatable(
@@ -347,6 +372,8 @@ def extract_videos_viewed(data):
 
 def extract_video_posts(data):
     video_list = get_in(data, "Video", "Videos", "VideoList")
+    if video_list is None:
+        video_list = get_in(data, "Post", "Posts", "VideoList")
     if video_list is None:
         return
     videos = get_date_filtered_items(video_list)
@@ -389,6 +416,7 @@ def extract_comments_and_likes(data):
     likes_given = get_all_first(
         get_date_filtered_items(
             get_list(data, "Activity", "Like List", "ItemFavoriteList")
+            or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
         )
     )
     likes_given_counts = get_count_by_date_key(likes_given, hourly_key)
@@ -429,9 +457,14 @@ def extract_comments_and_likes(data):
 
 def extract_session_info(data):
     session_paths = [
+        # Old
         ("Video", "Videos", "VideoList"),
         ("Activity", "Video Browsing History", "VideoList"),
         ("Comment", "Comments", "CommentsList"),
+        # New
+        ("Post", "Posts", "VideoList"),
+        ("Your Activity", "Favorite Videos", "FavoriteVideoList"),
+        ("Your Activity", "Watch History", "VideoList"),
     ]
 
     item_lists = [get_list(data, *path) for path in session_paths]
@@ -440,8 +473,8 @@ def extract_session_info(data):
     sessions = get_sessions(dates)
     df = pd.DataFrame(sessions, columns=["Start", "End", "Duration"])
     if df.empty:
-        df["Start"] = pd.Series()
-        df["Duration (in minutes)"] = pd.Series()
+        df["Start"] = pd.Series(dtype="object")
+        df["Duration (in minutes)"] = pd.Series(dtype="float64")
     else:
         df["Start"] = df["Start"].dt.strftime("%Y-%m-%d %H:%M")
         df["Duration (in minutes)"] = (df["Duration"].dt.total_seconds() / 60).round(2)
@@ -464,6 +497,8 @@ def extract_session_info(data):
 
 def extract_direct_messages(data):
     history = get_in(data, "Direct Messages", "Chat History", "ChatHistory")
+    if history is None:
+        history = get_in(data, "Direct Message", "Direct Messages", "ChatHistory")
     counter = itertools.count(start=1)
     anon_ids = defaultdict(lambda: next(counter))
     # Ensure 1 is the ID of the donating user
@@ -471,7 +506,6 @@ def extract_direct_messages(data):
     table = {"Anonymous ID": [], "Sent": []}
     for item in flatten_chat_history(history):
         table["Anonymous ID"].append(anon_ids[item["From"]])
-        print(item)
         table["Sent"].append(parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M"))
 
     description = props.Translatable(
@@ -509,7 +543,9 @@ def extract_comment_activity(data):
 
 ## REMOVED BY REQUEST FROM CAMBRIDGE (see notion)
 def extract_videos_liked(data):
-    favorite_videos = get_in(data, "Activity", "Favorite Videos", "FavoriteVideoList")
+    favorite_videos = get_in(
+        data, "Activity", "Favorite Videos", "FavoriteVideoList"
+    ) or get_in(data, "Your Activity", "Favorite Videos", "FavoriteVideoList")
     if favorite_videos is None:
         return
     table = {"Liked": []}
@@ -533,12 +569,17 @@ def extract_tiktok_data(zip_file):
         extract_session_info,
         extract_direct_messages,
     ]
-    for data in get_json_data_from_file(zip_file):
-        return [
-            table
-            for table in (extractor(data) for extractor in extractors)
-            if table is not None
-        ]
+    data_list = get_json_data_from_file(zip_file)
+    if not data_list:
+        return []
+    for data in data_list:
+        results = []
+        for extractor in extractors:
+            table = extractor(data)
+            if table is not None:
+                results.append(table)
+        return results
+    return []
 
 
 ######################
@@ -606,7 +647,7 @@ class DataDonationProcessor:
         description = props.Translatable(
             {
                 "en": f"Pick the file that you received from TikTok. The data that is required for research is extracted from your file in the next step. This may take a while, thank you for your patience.",
-                "nl": f"Klik op ‘Kies bestand’ om het bestand dat u ontvangen hebt van TikTok te kiezen. Als u op 'Verder' klikt worden de gegevens die nodig zijn voor het onderzoek uit uw bestand gehaald. Dit kan soms even duren. Een moment geduld a.u.b.",
+                "nl": f"Klik op 'Kies bestand' om het bestand dat u ontvangen hebt van TikTok te kiezen. Als u op 'Verder' klikt worden de gegevens die nodig zijn voor het onderzoek uit uw bestand gehaald. Dit kan soms even duren. Een moment geduld a.u.b.",
             }
         )
         prompt_file = props.PropsUIPromptFileInput(description, self.mime_types)
@@ -624,7 +665,6 @@ class DataDonationProcessor:
 
     def prompt_consent(self, data):
         log_title = props.Translatable({"en": "Log messages", "nl": "Log berichten"})
-
         tables = [
             props.PropsUIPromptConsentFormTable(
                 table.id,
@@ -634,15 +674,9 @@ class DataDonationProcessor:
             )
             for table in data
         ]
-        # meta_frame = pd.DataFrame(self.meta_data, columns=["type", "message"])
 
         self.log(f"prompt consent")
-        description = props.Translatable(
-            {
-                "en": """Decide whether you would like to donate the data below. Carefully check the data and adjust as required. Your donation will contibute to the reasearch project that was explained at the start of the project. Thank you in advance.
-                    If you DO NOT want to donate information from some of the tables below, you can select a table row and delete it or click the checkbox on the left table top to select all information in the table and click 'Delete'.""",
-            }
-        )
+
         consent_result = yield render_donation_page(
             self.platform,
             tables
