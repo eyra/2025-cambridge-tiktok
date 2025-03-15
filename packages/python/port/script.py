@@ -13,13 +13,280 @@ def process(sessionId):
     meta_data = []
     meta_data.append(("debug", f"{key}: start"))
 
-    # STEP 1: select the file
-    data = None
-    while True:
-        meta_data.append(("debug", f"{key}: prompt file"))
-        promptFile = prompt_file("application/zip, text/plain")
-        fileResult = yield render_data_submission_page(
-            [prompt_hello_world(), promptFile]
+    def __init__(self, data=None, **kwargs):
+        self._store = {}
+        self._key_map = {}  # Maps normalized keys to original casing
+        if data is None:
+            data = {}
+        self.update(dict(data, **kwargs))
+
+    def _normalize_key(self, key):
+        """Normalize key by removing spaces and converting to lowercase."""
+        return key.lower() if isinstance(key, str) else key
+
+    def _convert_value(self, value):
+        """Convert a value to use case-insensitive dictionaries for nested structures."""
+        if isinstance(value, dict) and not isinstance(value, CaseInsensitiveDict):
+            return CaseInsensitiveDict(value)
+        elif isinstance(value, list):
+            return [self._convert_value(item) for item in value]
+        return value
+
+    def __setitem__(self, key, value):
+        # Convert value to use case-insensitive dictionaries
+        value = self._convert_value(value)
+
+        # Normalize key
+        lower_key = self._normalize_key(key)
+        self._store[lower_key] = value
+        self._key_map[lower_key] = key
+
+    def __getitem__(self, key):
+        return self._store[self._normalize_key(key)]
+
+    def __delitem__(self, key):
+        lower_key = self._normalize_key(key)
+        del self._store[lower_key]
+        del self._key_map[lower_key]
+
+    def __iter__(self):
+        return iter(self._key_map.values())
+
+    def __len__(self):
+        return len(self._store)
+
+    def __repr__(self):
+        return repr(dict(self.items()))
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def update(self, other=None, **kwargs):
+        if other is not None:
+            for k, v in other.items():
+                self[k] = v
+        if kwargs:
+            for k, v in kwargs.items():
+                self[k] = v
+
+
+##########################
+# TikTok file processing #
+##########################
+
+filter_start = datetime.datetime.now() - datetime.timedelta(weeks=4 * 6)
+
+datetime_format = "%Y-%m-%d %H:%M:%S"
+
+
+def parse_datetime(value):
+    return datetime.datetime.strptime(value, datetime_format)
+
+
+def get_in(data_dict, *key_path):
+    for k in key_path:
+        data_dict = data_dict.get(k, None)
+        if data_dict is None:
+            return None
+    return data_dict
+
+
+def get_list(data_dict, *key_path):
+    result = get_in(data_dict, *key_path)
+    if result is None:
+        return []
+    return result
+
+
+def get_dict(data_dict, *key_path):
+    result = get_in(data_dict, *key_path)
+    if result is None:
+        return {}
+    return result
+
+
+def get_string(data_dict, *key_path):
+    result = get_in(data_dict, *key_path)
+    if result is None:
+        return ""
+    return result
+
+
+def cast_number(data_dict, *key_path):
+    value = get_in(data_dict, *key_path)
+    if value is None or value == "None":
+        return 0
+    return value
+
+
+def get_activity_video_browsing_list_data(data):
+    return get_list(
+        data, "Activity", "Video Browsing History", "VideoList"
+    ) or get_list(data, "Your Activity", "Watch History", "VideoList")
+
+
+def get_comment_list_data(data):
+    return get_in(data, "Comment", "Comments", "CommentsList")
+
+
+def get_date_filtered_items(items):
+    for item in items:
+        timestamp = parse_datetime(item["Date"])
+        # TODO: remove this once the script is working
+        # if timestamp < filter_start:
+        #     continue
+        yield (timestamp, item)
+
+
+def get_count_by_date_key(timestamps, key_func):
+    """Returns a dict of the form (key, count)
+
+    The key is determined by the key_func, which takes a datetime object and
+    returns an object suitable for sorting and usage as a dictionary key.
+
+    The returned list is sorted by key.
+    """
+    item_count = defaultdict(int)
+    for timestamp in timestamps:
+        item_count[key_func(timestamp)] += 1
+    return sorted(item_count.items())
+
+
+def get_all_first(items):
+    return (i[0] for i in items)
+
+
+def hourly_key(date):
+    return date.replace(minute=0, second=0, microsecond=0)
+
+
+def daily_key(date):
+    return date.date()
+
+
+def get_sessions(timestamps):
+    """Returns a list of tuples of the form (start, end, duration)
+
+    The start and end are datetime objects, and the duration is a timedelta
+    object.
+    """
+    timestamps = list(sorted(timestamps))
+    if len(timestamps) == 0:
+        return []
+    if len(timestamps) == 1:
+        return [(timestamps[0], timestamps[0], datetime.timedelta(0))]
+
+    sessions = []
+    start = timestamps[0]
+    end = timestamps[0]
+    for prev, cur in zip(timestamps, timestamps[1:]):
+        if cur - prev > datetime.timedelta(minutes=5):
+            sessions.append((start, end, end - start))
+            start = cur
+        end = cur
+    sessions.append((start, end, end - start))
+    return sessions
+
+
+def load_tiktok_data(json_file):
+    data = json.load(json_file, object_hook=CaseInsensitiveDict)
+    if not get_user_name(data):
+        raise IOError("Unsupported file type")
+    return data
+
+
+def get_json_data_from_zip(zip_file):
+    with zipfile.ZipFile(zip_file, "r") as zip:
+        for name in zip.namelist():
+            if not name.endswith(".json"):
+                continue
+            with zip.open(name) as json_file:
+                with suppress(IOError, json.JSONDecodeError):
+                    return [load_tiktok_data(json_file)]
+    return []
+
+
+def get_json_data_from_file(file_):
+    # TikTok exports can be a single JSON file or a zipped JSON file
+    try:
+        if hasattr(file_, "read"):  # If it's a file-like object
+            try:
+                return [load_tiktok_data(file_)]
+            except (json.decoder.JSONDecodeError, UnicodeDecodeError):
+                file_.seek(0)  # Reset file pointer
+                return get_json_data_from_zip(file_)
+        else:  # If it's a file path
+            with open(file_) as f:
+                try:
+                    return [load_tiktok_data(f)]
+                except (json.decoder.JSONDecodeError, UnicodeDecodeError) as e:
+                    return get_json_data_from_zip(file_)
+    except (IOError, json.JSONDecodeError):
+        return []
+
+
+def count_items(data, *key_path):
+    items = get_list(data, *key_path)
+    return len(items)
+
+
+def filtered_count(data, *key_path):
+    items = get_list(data, *key_path)
+    filtered_items = get_date_filtered_items(items)
+    return len(list(filtered_items))
+
+
+def get_user_name(data):
+    username = get_in(data, "Profile", "Profile Information", "ProfileMap", "userName")
+    if username is not None:
+        return username
+    return get_in(data, "Profile", "Profile Info", "ProfileMap", "userName")
+
+
+def get_chat_history(data):
+    return get_dict(data, "Direct Messages", "Chat History", "ChatHistory") or get_dict(
+        data, "Direct Message", "Direct Messages", "ChatHistory"
+    )
+
+
+def flatten_chat_history(history):
+    if history is None:
+        return []
+    return itertools.chain(*history.values())
+
+
+def filter_by_key(items, key, value):
+    return filter(lambda item: item[key] == value, items)
+
+
+def exclude_by_key(items, key, value):
+    """
+    Return a filtered list where items that match key & value are excluded.
+    """
+    return filter(lambda item: item[key] != value, items)
+
+
+def map_to_timeslot(series):
+    return series.map(lambda hour: f"{hour}-{hour+1}")
+
+
+def extract_summary_data(data):
+    user_name = get_user_name(data)
+    chat_history = get_chat_history(data)
+    flattened = flatten_chat_history(chat_history)
+    direct_messages = list(flattened)
+    sent_count = len(
+        list(filter(lambda item: item["From"] == user_name, direct_messages))
+    )
+    received_count = len(
+        list(
+            filter(
+                lambda item: item["From"] != user_name,
+                direct_messages,
+            )
         )
         if fileResult.__type__ == "PayloadString":
             # Extracting the zipfile
@@ -38,23 +305,41 @@ def process(sessionId):
                 file_extraction_result = extract_file(zipfile_ref, filename)
                 extraction_result.append(file_extraction_result)
 
-            if len(extraction_result) >= 0:
-                meta_data.append(
-                    ("debug", f"{key}: extraction successful, go to consent form")
-                )
-                data = extraction_result
-                break
-            else:
-                meta_data.append(
-                    ("debug", f"{key}: prompt confirmation to retry file selection")
-                )
-                retry_result = yield render_data_submission_page(retry_confirmation())
-                if retry_result.__type__ == "PayloadTrue":
-                    meta_data.append(("debug", f"{key}: skip due to invalid file"))
-                    continue
-                else:
-                    meta_data.append(("debug", f"{key}: retry prompt file"))
-                    break
+    summary_data = {
+        "Description": [
+            "Followers",
+            "Following",
+            "Likes received",
+            "Videos posted",
+            "Likes given",
+            "Comments posted",
+            "Messages sent",
+            "Messages received",
+            "Videos watched",
+        ],
+        "Number": [
+            count_items(data, "Activity", "Follower List", "FansList")
+            or count_items(data, "Your Activity", "Follower", "FansList"),
+            count_items(data, "Activity", "Following List", "Following")
+            or count_items(data, "Your Activity", "Following", "Following"),
+            cast_number(
+                data,
+                "Profile",
+                "Profile Information",
+                "ProfileMap",
+                "likesReceived",
+            ),
+            count_items(data, "Video", "Videos", "VideoList")
+            or count_items(data, "Post", "Posts", "VideoList"),
+            count_items(data, "Activity", "Like List", "ItemFavoriteList")
+            or count_items(data, "Your Activity", "Like List", "ItemFavoriteList"),
+            count_items(data, "Comment", "Comments", "CommentsList"),
+            sent_count,
+            received_count,
+            count_items(data, "Activity", "Video Browsing History", "VideoList")
+            or count_items(data, "Your Activity", "Watch History", "VideoList"),
+        ],
+    }
 
     # STEP 2: ask for consent
     meta_data.append(("debug", f"{key}: prompt consent"))
@@ -86,7 +371,9 @@ def extract_videos_viewed(data):
 
     df = pd.DataFrame(videos, columns=["Date", "Link"])
     date = df["Date"].map(parse_datetime)
-    df["Timeslot"] = pd.Series() if date.empty else map_to_timeslot(date.dt.hour)
+    df["Timeslot"] = (
+        pd.Series(dtype="object") if date.empty else map_to_timeslot(date.dt.hour)
+    )
     df = df.reindex(columns=["Date", "Timeslot", "Link"])
 
     description = props.Translatable(
@@ -105,6 +392,8 @@ def extract_videos_viewed(data):
 
 def extract_video_posts(data):
     video_list = get_in(data, "Video", "Videos", "VideoList")
+    if video_list is None:
+        video_list = get_in(data, "Post", "Posts", "VideoList")
     if video_list is None:
         return
     videos = get_date_filtered_items(video_list)
@@ -147,6 +436,7 @@ def extract_comments_and_likes(data):
     likes_given = get_all_first(
         get_date_filtered_items(
             get_list(data, "Activity", "Like List", "ItemFavoriteList")
+            or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
         )
     )
     likes_given_counts = get_count_by_date_key(likes_given, hourly_key)
@@ -187,9 +477,14 @@ def extract_comments_and_likes(data):
 
 def extract_session_info(data):
     session_paths = [
+        # Old
         ("Video", "Videos", "VideoList"),
         ("Activity", "Video Browsing History", "VideoList"),
         ("Comment", "Comments", "CommentsList"),
+        # New
+        ("Post", "Posts", "VideoList"),
+        ("Your Activity", "Favorite Videos", "FavoriteVideoList"),
+        ("Your Activity", "Watch History", "VideoList"),
     ]
 
     item_lists = [get_list(data, *path) for path in session_paths]
@@ -198,8 +493,8 @@ def extract_session_info(data):
     sessions = get_sessions(dates)
     df = pd.DataFrame(sessions, columns=["Start", "End", "Duration"])
     if df.empty:
-        df["Start"] = pd.Series()
-        df["Duration (in minutes)"] = pd.Series()
+        df["Start"] = pd.Series(dtype="object")
+        df["Duration (in minutes)"] = pd.Series(dtype="float64")
     else:
         df["Start"] = df["Start"].dt.strftime("%Y-%m-%d %H:%M")
         df["Duration (in minutes)"] = (df["Duration"].dt.total_seconds() / 60).round(2)
@@ -222,6 +517,8 @@ def extract_session_info(data):
 
 def extract_direct_messages(data):
     history = get_in(data, "Direct Messages", "Chat History", "ChatHistory")
+    if history is None:
+        history = get_in(data, "Direct Message", "Direct Messages", "ChatHistory")
     counter = itertools.count(start=1)
     anon_ids = defaultdict(lambda: next(counter))
     # Ensure 1 is the ID of the donating user
@@ -229,7 +526,6 @@ def extract_direct_messages(data):
     table = {"Anonymous ID": [], "Sent": []}
     for item in flatten_chat_history(history):
         table["Anonymous ID"].append(anon_ids[item["From"]])
-        print(item)
         table["Sent"].append(parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M"))
 
     description = props.Translatable(
@@ -267,7 +563,9 @@ def extract_comment_activity(data):
 
 ## REMOVED BY REQUEST FROM CAMBRIDGE (see notion)
 def extract_videos_liked(data):
-    favorite_videos = get_in(data, "Activity", "Favorite Videos", "FavoriteVideoList")
+    favorite_videos = get_in(
+        data, "Activity", "Favorite Videos", "FavoriteVideoList"
+    ) or get_in(data, "Your Activity", "Favorite Videos", "FavoriteVideoList")
     if favorite_videos is None:
         return
     table = {"Liked": []}
@@ -291,12 +589,17 @@ def extract_tiktok_data(zip_file):
         extract_session_info,
         extract_direct_messages,
     ]
-    for data in get_json_data_from_file(zip_file):
-        return [
-            table
-            for table in (extractor(data) for extractor in extractors)
-            if table is not None
-        ]
+    data_list = get_json_data_from_file(zip_file)
+    if not data_list:
+        return []
+    for data in data_list:
+        results = []
+        for extractor in extractors:
+            table = extractor(data)
+            if table is not None:
+                results.append(table)
+        return results
+    return []
 
 
 ######################
@@ -364,7 +667,7 @@ class DataDonationProcessor:
         description = props.Translatable(
             {
                 "en": f"Pick the file that you received from TikTok. The data that is required for research is extracted from your file in the next step. This may take a while, thank you for your patience.",
-                "nl": f"Klik op ‘Kies bestand’ om het bestand dat u ontvangen hebt van TikTok te kiezen. Als u op 'Verder' klikt worden de gegevens die nodig zijn voor het onderzoek uit uw bestand gehaald. Dit kan soms even duren. Een moment geduld a.u.b.",
+                "nl": f"Klik op 'Kies bestand' om het bestand dat u ontvangen hebt van TikTok te kiezen. Als u op 'Verder' klikt worden de gegevens die nodig zijn voor het onderzoek uit uw bestand gehaald. Dit kan soms even duren. Een moment geduld a.u.b.",
             }
         )
         prompt_file = props.PropsUIPromptFileInput(description, self.mime_types)
@@ -382,7 +685,6 @@ class DataDonationProcessor:
 
     def prompt_consent(self, data):
         log_title = props.Translatable({"en": "Log messages", "nl": "Log berichten"})
-
         tables = [
             props.PropsUIPromptConsentFormTable(
                 table.id,
@@ -392,15 +694,9 @@ class DataDonationProcessor:
             )
             for table in data
         ]
-        # meta_frame = pd.DataFrame(self.meta_data, columns=["type", "message"])
 
         self.log(f"prompt consent")
-        description = props.Translatable(
-            {
-                "en": """Decide whether you would like to donate the data below. Carefully check the data and adjust as required. Your donation will contibute to the reasearch project that was explained at the start of the project. Thank you in advance.
-                    If you DO NOT want to donate information from some of the tables below, you can select a table row and delete it or click the checkbox on the left table top to select all information in the table and click 'Delete'.""",
-            }
-        )
+
         consent_result = yield render_donation_page(
             self.platform,
             tables
