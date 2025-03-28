@@ -12,8 +12,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
-    "clean": "rm -rf build node_modules"
+    "test": "react-scripts test"
   },
   "browserslist": {
     "production": [
