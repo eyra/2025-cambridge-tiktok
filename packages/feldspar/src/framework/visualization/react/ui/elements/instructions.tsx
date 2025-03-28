@@ -67,7 +67,11 @@ function prepareCopy({ platform, locale }: Props): Copy {
   };
 }
 
-const title = new TextBundle().add("en", "Download").add("nl", "Download");
+const title = return new TextBundle()
+    .add("en", "Download")
+    .add("de", "Herunterladen")
+    .add("it", "Scarica")
+    .add("nl", "Download");
 
 function renderBullet(text: string): JSX.Element {
   return (
