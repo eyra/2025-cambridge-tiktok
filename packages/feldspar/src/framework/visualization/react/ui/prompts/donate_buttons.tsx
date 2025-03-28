@@ -52,12 +52,18 @@ export const DonateButtons = ({ onDonate, onCancel, locale, donateQuestion, dona
 
 const donateQuestionLabel = new TextBundle()
   .add("en", "Do you want to donate the above data?")
+  .add("de", "Möchten Sie die obigen Daten spenden?")
+  .add("it", "Vuoi donare i dati sopra indicati?")
   .add("nl", "Wilt u de bovenstaande gegevens doneren?");
 
 const donateButtonLabel = new TextBundle()
   .add("en", "Yes, donate")
+  .add("de", "Ja, spenden")
+  .add("it", "Sì, dona")
   .add("nl", "Ja, doneer");
 
 const cancelButtonLabel = new TextBundle()
   .add("en", "No")
+  .add("de", "Nein")
+  .add("it", "No")
   .add("nl", "Nee");

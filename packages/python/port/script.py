@@ -333,13 +333,21 @@ def extract_summary_data(data):
     description = props.Translatable(
         {
             "en": "This table contains summary information from your downloaded data. This might not match exactly with the numbers shown in your TikTok account.",
+            "de": "Diese Tabelle enthält zusammengefasste Informationen aus Ihren heruntergeladenen Daten. Diese stimmen möglicherweise nicht genau mit den Zahlen in Ihrem TikTok-Konto überein.",
+            "it": "Questa tabella contiene informazioni riassuntive dai tuoi dati scaricati. Questi potrebbero non corrispondere esattamente ai numeri mostrati nel tuo account TikTok.",
+            "nl": "Deze tabel bevat samenvattende informatie van je gedownloade gegevens. Dit komt mogelijk niet exact overeen met de cijfers in je TikTok-account.",
         }
     )
 
     return ExtractionResult(
         "tiktok_summary",
         props.Translatable(
-            {"en": "Summary information", "nl": "Samenvatting gegevens"}
+            {
+                "en": "Summary information",
+                "de": "Zusammenfassende Informationen",
+                "it": "Informazioni riassuntive",
+                "nl": "Samenvattende informatie",
+            }
         ),
         pd.DataFrame(summary_data),
         description,
@@ -359,12 +367,22 @@ def extract_videos_viewed(data):
     description = props.Translatable(
         {
             "en": "This table contains the videos you watched on TikTok.",
+            "de": "Diese Tabelle enthält die Videos, die Sie sich auf TikTok angesehen haben.",
+            "it": "Questa tabella contiene i video che hai guardato su TikTok.",
+            "nl": "Deze tabel bevat de video's die je op TikTok hebt bekeken.",
         }
     )
 
     return ExtractionResult(
         "tiktok_videos_viewed",
-        props.Translatable({"en": "Video views", "nl": "Videos gezien"}),
+        props.Translatable(
+            {
+                "en": "Video views",
+                "de": "Videoaufrufe",
+                "it": "Visualizzazioni video",
+                "nl": "Videoweergaven",
+            }
+        ),
         df,
         description,
     )
@@ -396,12 +414,22 @@ def extract_video_posts(data):
     description = props.Translatable(
         {
             "en": "This table contains the number of videos you yourself posted and the number of likes you received. For anonymization purposes, videos are grouped by the hour in which they were posted and the exact time is removed.",
+            "de": "Diese Tabelle enthält die Anzahl der Videos, die Sie selbst gepostet haben, sowie die Anzahl der erhaltenen Likes. Zur Anonymisierung werden die Videos nach der Stunde gruppiert, in der sie gepostet wurden, und die genaue Uhrzeit wird entfernt.",
+            "it": "Questa tabella contiene il numero di video che hai pubblicato e il numero di like ricevuti. Per motivi di anonimizzazione, i video sono raggruppati per ora di pubblicazione e l'orario esatto è stato rimosso.",
+            "nl": "Deze tabel bevat het aantal video's dat je zelf hebt gepost en het aantal likes dat je hebt ontvangen. Voor anonimiseringsdoeleinden zijn de video's gegroepeerd per uur van plaatsing en is de exacte tijd verwijderd.",
         }
     )
 
     return ExtractionResult(
         "tiktok_posts",
-        props.Translatable({"en": "Video posts", "nl": "Video posts"}),
+        props.Translatable(
+            {
+                "en": "Video posts",
+                "de": "Videobeiträge",
+                "it": "Video pubblicati",
+                "nl": "Videoposts",
+            }
+        ),
         df,
         description,
     )
@@ -444,12 +472,22 @@ def extract_comments_and_likes(data):
     description = props.Translatable(
         {
             "en": "This table contains the number of likes you gave and comments you made.",
+            "de": "Diese Tabelle enthält die Anzahl der vergebenen Likes und abgegebenen Kommentare.",
+            "it": "Questa tabella contiene il numero di like che hai messo e i commenti che hai scritto.",
+            "nl": "Deze tabel bevat het aantal likes dat je hebt gegeven en de reacties die je hebt geplaatst.",
         }
     )
 
     return ExtractionResult(
         "tiktok_comments_and_likes",
-        props.Translatable({"en": "Comments and likes", "nl": "Comments en likes"}),
+        props.Translatable(
+            {
+                "en": "Comments and likes",
+                "de": "Kommentare und Likes",
+                "it": "Commenti e Mi piace",
+                "nl": "Reacties en likes",
+            }
+        ),
         df,
         description,
     )
@@ -484,12 +522,22 @@ def extract_session_info(data):
     description = props.Translatable(
         {
             "en": "This table contains the start date and duration of your TikTok sessions.",
+            "de": "Diese Tabelle enthält das Startdatum und die Dauer Ihrer TikTok-Sitzungen.",
+            "it": "Questa tabella contiene la data di inizio e la durata delle tue sessioni su TikTok.",
+            "nl": "Deze tabel bevat de startdatum en de duur van je TikTok-sessies.",
         }
     )
 
     return ExtractionResult(
         "tiktok_session_info",
-        props.Translatable({"en": "Session information", "nl": "Sessie informatie"}),
+        props.Translatable(
+            {
+                "en": "Session information",
+                "de": "Sitzungsinformationen",
+                "it": "Informazioni sulla sessione",
+                "nl": "Sessie-informatie",
+            }
+        ),
         df,
         description,
     )
@@ -511,13 +559,21 @@ def extract_direct_messages(data):
     description = props.Translatable(
         {
             "en": "This table contains the times at which you sent or received direct messages. The content of the messages is not included, and user names are replaced with anonymous IDs.",
+            "de": "Diese Tabelle enthält die Uhrzeiten, zu denen Sie Direktnachrichten gesendet oder empfangen haben. Der Inhalt der Nachrichten ist nicht enthalten, und Benutzernamen wurden durch anonyme IDs ersetzt.",
+            "it": "Questa tabella contiene gli orari in cui hai inviato o ricevuto messaggi diretti. Il contenuto dei messaggi non è incluso e i nomi utente sono sostituiti da ID anonimi.",
+            "nl": "Deze tabel bevat de tijdstippen waarop je directe berichten hebt verzonden of ontvangen. De inhoud van de berichten is niet opgenomen en gebruikersnamen zijn vervangen door anonieme ID's.",
         }
     )
 
     return ExtractionResult(
         "tiktok_direct_messages",
         props.Translatable(
-            {"en": "Direct Message Activity", "nl": "Berichten activiteit"}
+            {
+                "en": "Direct Message Activity",
+                "de": "Aktivität bei Direktnachrichten",
+                "it": "Attività dei messaggi diretti",
+                "nl": "Activiteit met directe berichten",
+            }
         ),
         pd.DataFrame(table),
         description,
@@ -535,7 +591,14 @@ def extract_comment_activity(data):
 
     return ExtractionResult(
         "tiktok_comment_activity",
-        props.Translatable({"en": "Comment Activity", "nl": "Commentaar activiteit"}),
+        props.Translatable(
+            {
+                "en": "Comment Activity",
+                "de": "Kommentaraktivität",
+                "it": "Attività dei commenti",
+                "nl": "Reactie-activiteit",
+            }
+        ),
         pd.DataFrame({"Posted on": timestamps}),
         None,
     )
@@ -554,7 +617,14 @@ def extract_videos_liked(data):
 
     return ExtractionResult(
         "tiktok_videos_liked",
-        props.Translatable({"en": "Videos liked", "nl": "Gelikete videos"}),
+        props.Translatable(
+            {
+                "en": "Videos liked",
+                "de": "Videos mit Gefällt mir",
+                "it": "Video a cui hai messo Mi piace",
+                "nl": "Video's die je leuk vond",
+            }
+        ),
         pd.DataFrame(table),
         None,
     )
@@ -647,7 +717,9 @@ class DataDonationProcessor:
         description = props.Translatable(
             {
                 "en": f"Pick the file that you received from TikTok. The data that is required for research is extracted from your file in the next step. This may take a while, thank you for your patience.",
-                "nl": f"Klik op 'Kies bestand' om het bestand dat u ontvangen hebt van TikTok te kiezen. Als u op 'Verder' klikt worden de gegevens die nodig zijn voor het onderzoek uit uw bestand gehaald. Dit kan soms even duren. Een moment geduld a.u.b.",
+                "de": f"Wählen Sie die Datei aus, die Sie von TikTok erhalten haben. Die für die Forschung benötigten Daten werden im nächsten Schritt aus Ihrer Datei extrahiert. Dies kann eine Weile dauern – vielen Dank für Ihre Geduld.",
+                "it": f"Seleziona il file che hai ricevuto da TikTok. I dati richiesti per la ricerca verranno estratti dal tuo file nel passaggio successivo. Questo potrebbe richiedere un po' di tempo, grazie per la pazienza.",
+                "nl": f"Kies het bestand dat je van TikTok hebt ontvangen. De gegevens die nodig zijn voor onderzoek worden in de volgende stap uit je bestand gehaald. Dit kan even duren, bedankt voor je geduld.",
             }
         )
         prompt_file = props.PropsUIPromptFileInput(description, self.mime_types)
@@ -664,7 +736,14 @@ class DataDonationProcessor:
         return self.extractor(file)
 
     def prompt_consent(self, data):
-        log_title = props.Translatable({"en": "Log messages", "nl": "Log berichten"})
+        log_title = props.Translatable(
+            {
+                "en": "Log messages",
+                "de": "Protokollnachrichten",
+                "it": "Messaggi di log",
+                "nl": "Logberichten",
+            }
+        )
         tables = [
             props.PropsUIPromptConsentFormTable(
                 table.id,
@@ -726,7 +805,15 @@ def process(session_id):
 
 
 def render_donation_page(platform, body):
-    header = props.PropsUIHeader(props.Translatable({"en": platform, "nl": platform}))
+    header = props.PropsUIHeader(props.Translatable(
+            {
+                "en": "platform",
+                "de": "Plattform",
+                "it": "piattaforma",
+                "nl": "platform",
+            }
+        )
+    )
     page = props.PropsUIPageDataSubmission(platform, header, body)
     return CommandUIRender(page)
 
@@ -735,11 +822,27 @@ def retry_confirmation(platform):
     text = props.Translatable(
         {
             "en": "Unfortunately, we cannot process your data. Please make sure that you selected JSON as a file format when downloading your data from TikTok.",
-            "nl": "Helaas kunnen we uw gegevens niet verwerken. Zorg ervoor dat u JSON heeft geselecteerd als bestandsformaat bij het downloaden van uw gegevens van TikTok.",
+            "de": "Leider können wir Ihre Daten nicht verarbeiten. Bitte stellen Sie sicher, dass Sie beim Herunterladen Ihrer Daten von TikTok das JSON-Format ausgewählt haben.",
+            "it": "Purtroppo non possiamo elaborare i tuoi dati. Assicurati di aver selezionato il formato JSON quando hai scaricato i dati da TikTok.",
+            "nl": "Helaas kunnen we je gegevens niet verwerken. Zorg ervoor dat je JSON hebt geselecteerd als bestandsformaat bij het downloaden van je gegevens van TikTok.",
         }
     )
-    ok = props.Translatable({"en": "Try again", "nl": "Probeer opnieuw"})
-    cancel = props.Translatable({"en": "Continue", "nl": "Verder"})
+    ok = props.Translatable(
+        {
+            "en": "Try again",
+            "de": "Erneut versuchen",
+            "it": "Riprova",
+            "nl": "Probeer het opnieuw",
+        }
+    )
+    cancel = props.Translatable(
+        {
+            "en": "Continue",
+            "de": "Weiter",
+            "it": "Continua",
+            "nl": "Doorgaan",
+        }
+    )
     return props.PropsUIPromptConfirm(text, ok, cancel)
 
 
