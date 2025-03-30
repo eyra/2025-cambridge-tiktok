@@ -5,13 +5,17 @@ from port.api.commands import CommandSystemDonate, CommandUIRender
 import pandas as pd
 import zipfile
 import json
-import time
+import datetime
+from collections import defaultdict, namedtuple
+from collections.abc import MutableMapping
+from contextlib import suppress
 
 
-def process(sessionId):
-    key = "zip-contents-example"
-    meta_data = []
-    meta_data.append(("debug", f"{key}: start"))
+class CaseInsensitiveDict(MutableMapping):
+    """
+    A case-insensitive dictionary for handling TikTok data.
+    Keys are stored in lowercase but original casing is preserved.
+    """
 
     def __init__(self, data=None, **kwargs):
         self._store = {}
@@ -288,22 +292,7 @@ def extract_summary_data(data):
                 direct_messages,
             )
         )
-        if fileResult.__type__ == "PayloadString":
-            # Extracting the zipfile
-            meta_data.append(("debug", f"{key}: extracting file"))
-            extraction_result = []
-            zipfile_ref = get_zipfile(fileResult.value)
-            print(zipfile_ref, fileResult.value)
-            files = get_files(zipfile_ref)
-            fileCount = len(files)
-            for index, filename in enumerate(files):
-                percentage = ((index + 1) / fileCount) * 100
-                promptMessage = prompt_extraction_message(
-                    f"Extracting file: {filename}", percentage
-                )
-                yield render_data_submission_page(promptMessage)
-                file_extraction_result = extract_file(zipfile_ref, filename)
-                extraction_result.append(file_extraction_result)
+    )
 
     summary_data = {
         "Description": [
@@ -344,6 +333,9 @@ def extract_summary_data(data):
     description = props.Translatable(
         {
             "en": "This table contains summary information from your downloaded data. This might not match exactly with the numbers shown in your TikTok account.",
+            "de": "Diese Tabelle enthält zusammengefasste Informationen aus Ihren heruntergeladenen Daten. Diese stimmen möglicherweise nicht genau mit den Zahlen in Ihrem TikTok-Konto überein.",
+            "it": "Questa tabella contiene informazioni riassuntive dai tuoi dati scaricati. Questi potrebbero non corrispondere esattamente ai numeri mostrati nel tuo account TikTok.",
+            "nl": "Deze tabel bevat samenvattende informatie van je gedownloade gegevens. Dit komt mogelijk niet exact overeen met de cijfers in je TikTok-account.",
         }
     )
 
@@ -455,46 +447,47 @@ def extract_comments_and_likes(data):
             or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
         )
     )
+    likes_given_counts = get_count_by_date_key(likes_given, hourly_key)
+    if not likes_given_counts:
+        return
 
-    # Convert single body item to array if needed
-    body_items = [body] if not isinstance(body, list) else body
-    page = props.PropsUIPageDataSubmission("Zip", header, body_items)
-    return CommandUIRender(page)
-
-
-def retry_confirmation():
-    text = props.Translatable(
-        {
-            "en": "Unfortunately, we cannot process your file. Continue, if you are sure that you selected the right file. Try again to select a different file.",
-            "de": "Leider können wir Ihre Datei nicht bearbeiten. Fahren Sie fort, wenn Sie sicher sind, dass Sie die richtige Datei ausgewählt haben. Versuchen Sie, eine andere Datei auszuwählen.",
-            "it": "Purtroppo non possiamo elaborare il tuo file. Continua se sei sicuro di aver selezionato il file corretto. Prova a selezionare un file diverso.",
-            "nl": "Helaas, kunnen we uw bestand niet verwerken. Weet u zeker dat u het juiste bestand heeft gekozen? Ga dan verder. Probeer opnieuw als u een ander bestand wilt kiezen.",
-        }
+    df1 = pd.DataFrame(comment_counts, columns=["Date", "Comment posts"]).set_index(
+        "Date"
     )
-    ok = props.Translatable(
-        {
-            "en": "Try again",
-            "de": "Erneut versuchen",
-            "it": "Riprova",
-            "nl": "Probeer opnieuw",
-        }
+    df2 = pd.DataFrame(likes_given_counts, columns=["Date", "Likes given"]).set_index(
+        "Date"
     )
-    cancel = props.Translatable(
-        {"en": "Continue", "de": "Weiter", "it": "Continua", "nl": "Verder"}
+
+    df = pd.merge(df1, df2, left_on="Date", right_on="Date", how="outer").sort_index()
+    df["Timeslot"] = map_to_timeslot(df.index.hour)
+    df["Date"] = df.index.strftime("%Y-%m-%d %H:00:00")
+    df = (
+        df.reindex(columns=["Date", "Timeslot", "Comment posts", "Likes given"])
+        .reset_index(drop=True)
+        .fillna(0)
     )
-    return props.PropsUIPromptConfirm(text, ok, cancel)
+    df["Comment posts"] = df["Comment posts"].astype(int)
+    df["Likes given"] = df["Likes given"].astype(int)
 
-
-def prompt_file(extensions):
     description = props.Translatable(
         {
             "en": "This table contains the number of likes you gave and comments you made.",
+            "de": "Diese Tabelle enthält die Anzahl der vergebenen Likes und abgegebenen Kommentare.",
+            "it": "Questa tabella contiene il numero di like che hai messo e i commenti che hai scritto.",
+            "nl": "Deze tabel bevat het aantal likes dat je hebt gegeven en de reacties die je hebt geplaatst.",
         }
     )
 
     return ExtractionResult(
         "tiktok_comments_and_likes",
-        props.Translatable({"en": "Comments and likes", "nl": "Comments en likes"}),
+        props.Translatable(
+            {
+                "en": "Comments and likes",
+                "de": "Kommentare und Likes",
+                "it": "Commenti e Mi piace",
+                "nl": "Reacties en likes",
+            }
+        ),
         df,
         description,
     )
@@ -566,6 +559,9 @@ def extract_direct_messages(data):
     description = props.Translatable(
         {
             "en": "This table contains the times at which you sent or received direct messages. The content of the messages is not included, and user names are replaced with anonymous IDs.",
+            "de": "Diese Tabelle enthält die Uhrzeiten, zu denen Sie Direktnachrichten gesendet oder empfangen haben. Der Inhalt der Nachrichten ist nicht enthalten, und Benutzernamen wurden durch anonyme IDs ersetzt.",
+            "it": "Questa tabella contiene gli orari in cui hai inviato o ricevuto messaggi diretti. Il contenuto dei messaggi non è incluso e i nomi utente sono sostituiti da ID anonimi.",
+            "nl": "Deze tabel bevat de tijdstippen waarop je directe berichten hebt verzonden of ontvangen. De inhoud van de berichten is niet opgenomen en gebruikersnamen zijn vervangen door anonieme ID's.",
         }
     )
 
@@ -715,6 +711,7 @@ class DataDonationProcessor:
         retry_result = yield render_donation_page(
             self.platform, [retry_confirmation(self.platform)]
         )
+        return retry_result.__type__ == "PayloadTrue"
 
     def prompt_file(self):
         description = props.Translatable(
@@ -810,10 +807,10 @@ def process(session_id):
 def render_donation_page(platform, body):
     header = props.PropsUIHeader(props.Translatable(
             {
-                "en": "platform",
-                "de": "Plattform",
-                "it": "piattaforma",
-                "nl": "platform",
+                "en": "TikTok",
+                "de": "TikTok",
+                "it": "TikTok",
+                "nl": "TikTok",
             }
         )
     )
