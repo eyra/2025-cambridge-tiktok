@@ -87,11 +87,21 @@ export class RadioInputFactory implements PromptFactory {
 export class TableFactory implements PromptFactory {
   create(body: unknown, context: PromptContext): JSX.Element | null {
     if (isPropsUIPromptConsentFormTable(body)) {
-      const { id, title, data_frame } = body;
+      const { id, title, description, data_frame } = body;
       const dataFrame = JSON.parse(data_frame);
 
-      const headCells = Object.keys(dataFrame).map((column: string) => 
-        ({ __type__: "PropsUITableCell" as const, text: column }));
+      // Translate the column headers when overrides are provided
+      const headers = body.headers || {};
+      const headCells = Object.keys(dataFrame).map((column: string) => {
+        const text = headers[column] 
+          ? Translator.translate(headers[column], context.locale) 
+          : column;
+        
+        return { 
+          __type__: "PropsUITableCell" as const, 
+          text 
+        };
+      });
       const head = { __type__: "PropsUITableHead" as const, cells: headCells };
       
       const rows = Object.keys(dataFrame[Object.keys(dataFrame)[0]] || {}).map(rowIndex => ({
@@ -116,6 +126,7 @@ export class TableFactory implements PromptFactory {
         table: {
           ...parsedTable,
           title: Translator.translate(title, context.locale),
+          description: description && Translator.translate(description, context.locale),
           deletedRowCount: 0
         },
         context,
@@ -133,6 +144,8 @@ export class DonateButtonsFactory implements PromptFactory {
       const props = {
         ...rest,
         ...context,
+        donateQuestion,
+        donateButton,
       };
       return React.createElement(DonateButtons, props);
     }

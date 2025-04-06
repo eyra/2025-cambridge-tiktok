@@ -21,8 +21,8 @@ test('can upload a zip file and view contents', async ({ page }) => {
   await page.getByText('Continue').click();
   
   // Check that the ZIP file content is visible
-  await expect(page.getByText('Summary information')).toBeVisible();
+  await expect(page.getByText('Summary information',{ exact: true })).toBeVisible();
   
   // Check that the donation actions are visible
-  await expect(page.getByText('Yes, donate')).toBeVisible();
+  await expect(page.getByText('Donate', { exact: true })).toBeVisible();
 });
