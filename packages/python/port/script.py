@@ -296,15 +296,15 @@ def extract_summary_data(data):
 
     summary_data = {
         "Description": [
-            "Followers",
-            "Following",
-            "Likes received",
-            "Videos posted",
-            "Likes given",
-            "Comments posted",
-            "Messages sent",
-            "Messages received",
-            "Videos watched",
+            "Follower",
+            "Seguiti",
+            "Mi piace ricevuti",
+            "Video pubblicati",
+            "Mi piace messi",
+            "Commenti pubblicati",
+            "Messaggi inviati",
+            "Messaggi ricevuti",
+            "Video visualizzati",
         ],
         "Number": [
             count_items(data, "Activity", "Follower List", "FansList")
@@ -351,6 +351,24 @@ def extract_summary_data(data):
         ),
         pd.DataFrame(summary_data),
         description,
+        headers={
+            "Description": props.Translatable(
+                {
+                    "en": "Description",
+                    "de": "Beschreibung",
+                    "it": "Descrizione",
+                    "nl": "Beschrijving",
+                }
+            ),
+            "Number": props.Translatable(
+                {
+                    "en": "Number",
+                    "de": "Anzahl",
+                    "it": "Totale",
+                    "nl": "Totaal",
+                }
+            ),
+        },
     )
 
 
@@ -385,6 +403,32 @@ def extract_videos_viewed(data):
         ),
         df,
         description,
+        headers={
+            "Link": props.Translatable(
+                {
+                    "en": "Link",
+                    "de": "Link",
+                    "it": "Link",
+                    "nl": "Link",
+                }
+            ),
+            "Date": props.Translatable(
+                {
+                    "en": "Date",
+                    "de": "Datum",
+                    "it": "Data",
+                    "nl": "Datum",
+                }
+            ),
+            "Timeslot": props.Translatable(
+                {
+                    "en": "Timeslot",
+                    "de": "Zeitraum",
+                    "it": "Fascia oraria",
+                    "nl": "Tijdslot",
+                }
+            ),
+        },
     )
 
 
@@ -404,7 +448,7 @@ def extract_video_posts(data):
     df = pd.DataFrame(post_stats).transpose()
     if df.empty:
         df["Date"] = pd.Series()
-        df["Timselot"] = pd.Series()
+        df["Timeslot"] = pd.Series()
     else:
         df["Date"] = df.index.strftime("%Y-%m-%d")
         df["Timeslot"] = map_to_timeslot(df.index.hour)
@@ -432,6 +476,40 @@ def extract_video_posts(data):
         ),
         df,
         description,
+        headers={
+            "Date": props.Translatable(
+                {
+                    "en": "Date",
+                    "de": "Datum",
+                    "it": "Data",
+                    "nl": "Datum",
+                }
+            ),
+            "Timeslot": props.Translatable(
+                {
+                    "en": "Timeslot",
+                    "de": "Zeitraum",
+                    "it": "Fascia oraria",
+                    "nl": "Tijdslot",
+                }
+            ),
+            "Videos": props.Translatable(
+                {
+                    "en": "Videos",
+                    "de": "Videos",
+                    "it": "Video",
+                    "nl": "Video's",
+                }
+            ),
+            "Likes received": props.Translatable(
+                {
+                    "en": "Likes received",
+                    "de": "Erhaltene Likes",
+                    "it": "Mi piace ricevuti",
+                    "nl": "Ontvangen likes",
+                }
+            ),
+        },
     )
 
 
@@ -490,6 +568,40 @@ def extract_comments_and_likes(data):
         ),
         df,
         description,
+        headers={
+            "Date": props.Translatable(
+                {
+                    "en": "Date",
+                    "de": "Datum",
+                    "it": "Data",
+                    "nl": "Datum",
+                }
+            ),
+            "Timeslot": props.Translatable(
+                {
+                    "en": "Timeslot",
+                    "de": "Zeitraum",
+                    "it": "Fascia oraria",
+                    "nl": "Tijdslot",
+                }
+            ),
+            "Comment posts": props.Translatable(
+                {
+                    "en": "Comment posts",
+                    "de": "Kommentare",
+                    "it": "Commenti pubblicati",
+                    "nl": "Reacties",
+                }
+            ),
+            "Likes given": props.Translatable(
+                {
+                    "en": "Likes given",
+                    "de": "Vergebene Likes",
+                    "it": "Mi piace messi",
+                    "nl": "Gegeven likes",
+                }
+            ),
+        },
     )
 
 
@@ -540,6 +652,24 @@ def extract_session_info(data):
         ),
         df,
         description,
+        headers={
+            "Start": props.Translatable(
+                {
+                    "en": "Start",
+                    "de": "Start",
+                    "it": "Inizio",
+                    "nl": "Start",
+                }
+            ),
+            "Duration (in minutes)": props.Translatable(
+                {
+                    "en": "Duration (in minutes)",
+                    "de": "Dauer (in Minuten)",
+                    "it": "Durata (in minuti)",
+                    "nl": "Duur (in minuten)",
+                }
+            ),
+        },
     )
 
 
@@ -577,56 +707,24 @@ def extract_direct_messages(data):
         ),
         pd.DataFrame(table),
         description,
-    )
-
-
-## REMOVED BY REQUEST FROM CAMBRIDGE (see notion)
-def extract_comment_activity(data):
-    comments = get_in(data, "Comment", "Comments", "CommentsList")
-    if comments is None:
-        return
-    timestamps = [
-        parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M") for item in comments
-    ]
-
-    return ExtractionResult(
-        "tiktok_comment_activity",
-        props.Translatable(
-            {
-                "en": "Comment Activity",
-                "de": "Kommentaraktivität",
-                "it": "Attività dei commenti",
-                "nl": "Reactie-activiteit",
-            }
-        ),
-        pd.DataFrame({"Posted on": timestamps}),
-        None,
-    )
-
-
-## REMOVED BY REQUEST FROM CAMBRIDGE (see notion)
-def extract_videos_liked(data):
-    favorite_videos = get_in(
-        data, "Activity", "Favorite Videos", "FavoriteVideoList"
-    ) or get_in(data, "Your Activity", "Favorite Videos", "FavoriteVideoList")
-    if favorite_videos is None:
-        return
-    table = {"Liked": []}
-    for item in favorite_videos:
-        table["Liked"].append(parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M"))
-
-    return ExtractionResult(
-        "tiktok_videos_liked",
-        props.Translatable(
-            {
-                "en": "Videos liked",
-                "de": "Videos mit Gefällt mir",
-                "it": "Video a cui hai messo Mi piace",
-                "nl": "Video's die je leuk vond",
-            }
-        ),
-        pd.DataFrame(table),
-        None,
+        headers={
+            "Anonymous ID": props.Translatable(
+                {
+                    "en": "Anonymous ID",
+                    "de": "Anonyme ID",
+                    "it": "ID anonimo",
+                    "nl": "Anonieme ID",
+                }
+            ),
+            "Sent": props.Translatable(
+                {
+                    "en": "Sent",
+                    "de": "Gesendet",
+                    "it": "Inviato",
+                    "nl": "Verzonden",
+                }
+            ),
+        },
     )
 
 
@@ -657,7 +755,7 @@ def extract_tiktok_data(zip_file):
 ######################
 
 ExtractionResult = namedtuple(
-    "ExtractionResult", ["id", "title", "data_frame", "description"]
+    "ExtractionResult", ["id", "title", "data_frame", "description", "headers"]
 )
 
 
@@ -750,6 +848,7 @@ class DataDonationProcessor:
                 table.title,
                 table.description,
                 table.data_frame,
+                headers=table.headers,
             )
             for table in data
         ]
@@ -805,7 +904,8 @@ def process(session_id):
 
 
 def render_donation_page(platform, body):
-    header = props.PropsUIHeader(props.Translatable(
+    header = props.PropsUIHeader(
+        props.Translatable(
             {
                 "en": "TikTok",
                 "de": "TikTok",
