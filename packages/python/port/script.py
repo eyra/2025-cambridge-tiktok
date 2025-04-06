@@ -842,6 +842,18 @@ class DataDonationProcessor:
                 "nl": "Logberichten",
             }
         )
+
+        description = props.PropsUIPromptText(
+            text=props.Translatable(
+                {
+                    "en": "Please review the data below. You can delete any information you prefer not to share. Your donation supports the research project introduced earlier. Thank you!",
+                    "de": "Bitte überprüfen Sie die Daten unten. Sie können alle Informationen löschen, die Sie nicht teilen möchten. Ihre Spende unterstützt das zuvor vorgestellte Forschungsprojekt. Vielen Dank!",
+                    "it": "Controlla i dati qui sotto. Puoi eliminare le informazioni che preferisci non condividere. La tua donazione sostiene il progetto di ricerca presentato in precedenza. Grazie!",
+                    "nl": "Controleer de gegevens hieronder. Je kunt alle informatie verwijderen die je liever niet deelt. Je donatie ondersteunt het eerder geïntroduceerde onderzoeksproject. Dank je!",
+                }
+            )   
+        )
+
         tables = [
             props.PropsUIPromptConsentFormTable(
                 table.id,
@@ -857,7 +869,8 @@ class DataDonationProcessor:
 
         consent_result = yield render_donation_page(
             self.platform,
-            tables
+            [description]
+            + tables
             + [
                 props.PropsUIDataSubmissionButtons(
                     donate_question=props.Translatable(
