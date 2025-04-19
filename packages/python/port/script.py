@@ -381,6 +381,8 @@ def extract_videos_viewed(data):
         pd.Series(dtype="object") if date.empty else map_to_timeslot(date.dt.hour)
     )
     df = df.reindex(columns=["Date", "Timeslot", "Link"])
+    # Sort by date and timeslot (newest first)
+    df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
 
     description = props.Translatable(
         {
@@ -454,6 +456,8 @@ def extract_video_posts(data):
         df["Timeslot"] = map_to_timeslot(df.index.hour)
     df = df.reset_index(drop=True)
     df = df.reindex(columns=["Date", "Timeslot", "Videos", "Likes received"])
+    # Sort by date and timeslot (newest first)
+    df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
 
     description = props.Translatable(
         {
@@ -546,6 +550,8 @@ def extract_comments_and_likes(data):
     )
     df["Comment posts"] = df["Comment posts"].astype(int)
     df["Likes given"] = df["Likes given"].astype(int)
+    # Sort by date and timeslot (newest first)
+    df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
 
     description = props.Translatable(
         {
