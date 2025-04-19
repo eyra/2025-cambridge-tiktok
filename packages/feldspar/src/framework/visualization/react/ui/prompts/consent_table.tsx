@@ -17,9 +17,11 @@ import {
 } from "../../../../types/data_submission";
 import _ from "lodash";
 import { PromptContext } from "./factory";
+import { NumberIcon } from '../elements/number_icon'
 
 interface Props {
   table: PropsUITable & {
+    number: number;
     title: string;
     description?: string;
     deletedRowCount: number;
@@ -35,6 +37,7 @@ export const ConsentTable = forwardRef<ConsentTableHandle | null, Props>(
   ({ table, readOnly = false, context, onChange }, ref): JSX.Element => {
     const [currentTable, setCurrentTable] = React.useState<
       PropsUITable & {
+        number: number;
         title: string;
         description?: string;
         deletedRowCount: number;
@@ -57,15 +60,14 @@ export const ConsentTable = forwardRef<ConsentTableHandle | null, Props>(
     }, []);
 
     return (
-      <div key={table.id} className="flex flex-col gap-4 mb-20">
-        <Title4 text={table.title} margin="" />
-        {table.description && <BodyLarge text={table.description} margin="" />}
-        <Table
-          {...currentTable}
-          readOnly={readOnly}
-          {...context}
-          onChange={handleChange}
-        />
+      <div key={table.id} className='flex flex-col gap-4 mb-20'>
+        <div className='flex flex-row gap-4 items-center'>
+          <NumberIcon number={table.number} />
+          <div className='pt-2px'>
+            <Title4 text={table.title} margin='' />
+          </div>
+        </div>
+        <Table {...table} readOnly={readOnly} locale={context.locale} onChange={handleChange} id={table.id} key={table.id} />
       </div>
     );
   }

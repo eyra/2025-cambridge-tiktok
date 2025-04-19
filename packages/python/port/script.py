@@ -856,13 +856,14 @@ class DataDonationProcessor:
 
         tables = [
             props.PropsUIPromptConsentFormTable(
-                table.id,
-                table.title,
-                table.description,
-                table.data_frame,
+                id=table.id,
+                number=i,
+                title=table.title,
+                description=table.description,
+                data_frame=table.data_frame,
                 headers=table.headers,
             )
-            for table in data
+            for i, table in enumerate(data, start=1)
         ]
 
         self.log(f"prompt consent")

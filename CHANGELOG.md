@@ -9,11 +9,16 @@
 * Removed - This notes any features that have been deleted and removed from the software
 * Security - This acts as an invitation to users who want to upgrade and avoid any software vulnerabilities
 
-## unreleased
+## \#4 unreleased
 
 * Changed: Feldspar is now split into React component and app
 * Changed: Allow multiple block-types to interleave on a submission page
 * Added: end to end tests using Playwright
+
+## \#3 2024-06-27
+
+* Changed: layout to support mobile screens
+* Added: support for mible variant of a table using
 
 ## \#2 2024-06-13
 
