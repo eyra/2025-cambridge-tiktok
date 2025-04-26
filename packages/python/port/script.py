@@ -636,6 +636,8 @@ def extract_session_info(data):
         df["Duration (in minutes)"] = (df["Duration"].dt.total_seconds() / 60).round(2)
     df = df.drop("End", axis=1)
     df = df.drop("Duration", axis=1)
+    # Sort by start date (newest first)
+    df = df.sort_values(by=["Start"], ascending=False).reset_index(drop=True)
 
     description = props.Translatable(
         {
@@ -700,6 +702,10 @@ def extract_direct_messages(data):
             "nl": "Deze tabel bevat de tijdstippen waarop je directe berichten hebt verzonden of ontvangen. De inhoud van de berichten is niet opgenomen en gebruikersnamen zijn vervangen door anonieme ID's.",
         }
     )
+    # Sort by date (newest first)
+    table = pd.DataFrame(table).sort_values(
+        by=["Sent"], ascending=False
+    ).reset_index(drop=True)
 
     return ExtractionResult(
         "tiktok_direct_messages",
@@ -895,6 +901,8 @@ class DataDonationProcessor:
             ],
         )
 
+        print(consent_result.__type__)
+        print(consent_result.value)
         if consent_result.__type__ == "PayloadJSON":
             self.log(f"donate consent data")
             yield donate(f"{self.session_id}-{self.platform}", consent_result.value)
