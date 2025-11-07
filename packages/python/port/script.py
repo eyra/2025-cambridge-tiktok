@@ -360,19 +360,13 @@ def map_to_timeslot(series):
 
 
 def extract_summary_data(data, locale="en"):
-    print(f"[LOG] extract_summary_data: Starting extraction with locale={locale}")
     user_name = get_user_name(data)
-    print(f"[LOG] extract_summary_data: Got user_name={user_name}")
     chat_history = get_chat_history(data)
-    print(f"[LOG] extract_summary_data: Got chat_history, type={type(chat_history)}")
     flattened = flatten_chat_history(chat_history)
-    print(f"[LOG] extract_summary_data: Flattened chat_history")
     direct_messages = list(flattened)
-    print(f"[LOG] extract_summary_data: Direct messages count={len(direct_messages)}")
     sent_count = len(
         list(filter(lambda item: item["From"] == user_name, direct_messages))
     )
-    print(f"[LOG] extract_summary_data: Sent count={sent_count}")
     received_count = len(
         list(
             filter(
@@ -381,9 +375,6 @@ def extract_summary_data(data, locale="en"):
             )
         )
     )
-    print(f"[LOG] extract_summary_data: Received count={received_count}")
-
-    print(f"[LOG] extract_summary_data: Building summary_data dictionary")
     summary_data = {
         "Description": [
             get_translated_text("followers", locale),
@@ -425,7 +416,6 @@ def extract_summary_data(data, locale="en"):
             or count_items(data, "Your Activity", "Watch History", "VideoList"),
         ],
     }
-    print(f"[LOG] extract_summary_data: Summary data built successfully")
 
     description = props.Translatable(
         {
@@ -436,9 +426,7 @@ def extract_summary_data(data, locale="en"):
         }
     )
 
-    print(f"[LOG] extract_summary_data: Creating DataFrame")
     df = pd.DataFrame(summary_data)
-    print(f"[LOG] extract_summary_data: DataFrame created, shape={df.shape}")
 
     result = ExtractionResult(
         "tiktok_summary",
@@ -471,28 +459,20 @@ def extract_summary_data(data, locale="en"):
             ),
         },
     )
-    print(f"[LOG] extract_summary_data: ExtractionResult created successfully")
     return result
 
 
 def extract_videos_viewed(data):
-    print(f"[LOG] extract_videos_viewed: Starting extraction")
     videos = get_activity_video_browsing_list_data(data)
-    print(f"[LOG] extract_videos_viewed: Got {len(videos)} videos")
 
     df = pd.DataFrame(videos, columns=["Date", "Link"])
-    print(f"[LOG] extract_videos_viewed: DataFrame created, shape={df.shape}")
     date = df["Date"].map(parse_datetime)
-    print(f"[LOG] extract_videos_viewed: Dates parsed")
     df["Timeslot"] = (
         pd.Series(dtype="object") if date.empty else map_to_timeslot(date.dt.hour)
     )
-    print(f"[LOG] extract_videos_viewed: Timeslots added")
     df = df.reindex(columns=["Date", "Timeslot", "Link"])
-    print(f"[LOG] extract_videos_viewed: Columns reindexed")
     # Sort by date and timeslot (newest first)
     df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
-    print(f"[LOG] extract_videos_viewed: DataFrame sorted")
 
     description = props.Translatable(
         {
@@ -503,8 +483,7 @@ def extract_videos_viewed(data):
         }
     )
 
-    print(f"[LOG] extract_videos_viewed: Creating ExtractionResult")
-    result = ExtractionResult(
+    return ExtractionResult(
         "tiktok_videos_viewed",
         props.Translatable(
             {
@@ -588,8 +567,7 @@ def extract_video_posts(data):
         }
     )
 
-    print(f"[LOG] extract_video_posts: Creating ExtractionResult")
-    result = ExtractionResult(
+    return ExtractionResult(
         "tiktok_posts",
         props.Translatable(
             {
@@ -636,17 +614,13 @@ def extract_video_posts(data):
             ),
         },
     )
-    print(f"[LOG] extract_video_posts: ExtractionResult created successfully")
-    return result
 
 
 def extract_comments_and_likes(data):
-    print(f"[LOG] extract_comments_and_likes: Starting extraction")
     comments = get_all_first(
         get_date_filtered_items(get_list(data, "Comment", "Comments", "CommentsList"))
     )
     comment_counts = get_count_by_date_key(comments, hourly_key)
-    print(f"[LOG] extract_comments_and_likes: Comment counts={len(comment_counts)}")
 
     likes_given = get_all_first(
         get_date_filtered_items(
@@ -655,37 +629,28 @@ def extract_comments_and_likes(data):
         )
     )
     likes_given_counts = get_count_by_date_key(likes_given, hourly_key)
-    print(f"[LOG] extract_comments_and_likes: Likes given counts={len(likes_given_counts)}")
     if not likes_given_counts:
-        print(f"[LOG] extract_comments_and_likes: No likes given, returning None")
         return
 
-    print(f"[LOG] extract_comments_and_likes: Creating DataFrames")
     df1 = pd.DataFrame(comment_counts, columns=["Date", "Comment posts"]).set_index(
         "Date"
     )
     df2 = pd.DataFrame(likes_given_counts, columns=["Date", "Likes given"]).set_index(
         "Date"
     )
-    print(f"[LOG] extract_comments_and_likes: DataFrames created, merging")
 
     df = pd.merge(df1, df2, left_on="Date", right_on="Date", how="outer").sort_index()
-    print(f"[LOG] extract_comments_and_likes: DataFrames merged, shape={df.shape}")
     df["Timeslot"] = map_to_timeslot(df.index.hour)
     df["Date"] = df.index.strftime("%Y-%m-%d %H:00:00")
-    print(f"[LOG] extract_comments_and_likes: Timeslots and dates formatted")
     df = (
         df.reindex(columns=["Date", "Timeslot", "Comment posts", "Likes given"])
         .reset_index(drop=True)
         .fillna(0)
     )
-    print(f"[LOG] extract_comments_and_likes: DataFrame reindexed and filled")
     df["Comment posts"] = df["Comment posts"].astype(int)
     df["Likes given"] = df["Likes given"].astype(int)
-    print(f"[LOG] extract_comments_and_likes: Columns converted to int")
     # Sort by date and timeslot (newest first)
     df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
-    print(f"[LOG] extract_comments_and_likes: DataFrame sorted")
 
     description = props.Translatable(
         {
@@ -696,8 +661,7 @@ def extract_comments_and_likes(data):
         }
     )
 
-    print(f"[LOG] extract_comments_and_likes: Creating ExtractionResult")
-    result = ExtractionResult(
+    return ExtractionResult(
         "tiktok_comments_and_likes",
         props.Translatable(
             {
@@ -744,12 +708,9 @@ def extract_comments_and_likes(data):
             ),
         },
     )
-    print(f"[LOG] extract_comments_and_likes: ExtractionResult created successfully")
-    return result
 
 
 def extract_session_info(data):
-    print(f"[LOG] extract_session_info: Starting extraction")
     session_paths = [
         # Old
         ("Video", "Videos", "VideoList"),
@@ -761,29 +722,21 @@ def extract_session_info(data):
         ("Your Activity", "Watch History", "VideoList"),
     ]
 
-    print(f"[LOG] extract_session_info: Getting item lists from {len(session_paths)} paths")
     item_lists = [get_list(data, *path) for path in session_paths]
-    print(f"[LOG] extract_session_info: Got {len(item_lists)} item lists")
     dates = get_all_first(get_date_filtered_items(itertools.chain(*item_lists)))
-    print(f"[LOG] extract_session_info: Extracted dates")
 
     sessions = get_sessions(dates)
-    print(f"[LOG] extract_session_info: Got {len(sessions)} sessions")
     df = pd.DataFrame(sessions, columns=["Start", "End", "Duration"])
-    print(f"[LOG] extract_session_info: DataFrame created, shape={df.shape}, empty={df.empty}")
     if df.empty:
         df["Start"] = pd.Series(dtype="object")
         df["Duration (in minutes)"] = pd.Series(dtype="float64")
     else:
         df["Start"] = df["Start"].dt.strftime("%Y-%m-%d %H:%M")
         df["Duration (in minutes)"] = (df["Duration"].dt.total_seconds() / 60).round(2)
-    print(f"[LOG] extract_session_info: Columns formatted")
     df = df.drop("End", axis=1)
     df = df.drop("Duration", axis=1)
-    print(f"[LOG] extract_session_info: Columns dropped")
     # Sort by start date (newest first)
     df = df.sort_values(by=["Start"], ascending=False).reset_index(drop=True)
-    print(f"[LOG] extract_session_info: DataFrame sorted")
 
     description = props.Translatable(
         {
@@ -794,8 +747,7 @@ def extract_session_info(data):
         }
     )
 
-    print(f"[LOG] extract_session_info: Creating ExtractionResult")
-    result = ExtractionResult(
+    return ExtractionResult(
         "tiktok_session_info",
         props.Translatable(
             {
@@ -826,28 +778,20 @@ def extract_session_info(data):
             ),
         },
     )
-    print(f"[LOG] extract_session_info: ExtractionResult created successfully")
-    return result
 
 
 def extract_direct_messages(data):
-    print(f"[LOG] extract_direct_messages: Starting extraction")
     history = get_in(data, "Direct Messages", "Chat History", "ChatHistory")
     if history is None:
         history = get_in(data, "Direct Message", "Direct Messages", "ChatHistory")
-    print(f"[LOG] extract_direct_messages: Got chat history, type={type(history)}")
     counter = itertools.count(start=1)
     anon_ids = defaultdict(lambda: next(counter))
     # Ensure 1 is the ID of the donating user
     anon_ids[get_user_name(data)]
-    print(f"[LOG] extract_direct_messages: Initialized anon_ids")
     table = {"Anonymous ID": [], "Sent": []}
-    message_count = 0
     for item in flatten_chat_history(history):
         table["Anonymous ID"].append(anon_ids[item["From"]])
         table["Sent"].append(parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M"))
-        message_count += 1
-    print(f"[LOG] extract_direct_messages: Processed {message_count} messages")
 
     description = props.Translatable(
         {
@@ -858,14 +802,11 @@ def extract_direct_messages(data):
         }
     )
     # Sort by date (newest first)
-    print(f"[LOG] extract_direct_messages: Creating and sorting DataFrame")
     table = pd.DataFrame(table).sort_values(
         by=["Sent"], ascending=False
     ).reset_index(drop=True)
-    print(f"[LOG] extract_direct_messages: DataFrame sorted, shape={table.shape}")
 
-    print(f"[LOG] extract_direct_messages: Creating ExtractionResult")
-    result = ExtractionResult(
+    return ExtractionResult(
         "tiktok_direct_messages",
         props.Translatable(
             {
@@ -896,12 +837,9 @@ def extract_direct_messages(data):
             ),
         },
     )
-    print(f"[LOG] extract_direct_messages: ExtractionResult created successfully")
-    return result
 
 
 def extract_tiktok_data(zip_file, locale="en"):
-    print(f"[LOG] extract_tiktok_data: Starting with locale={locale}")
     extractors = [
         extract_summary_data,
         extract_video_posts,
@@ -910,34 +848,22 @@ def extract_tiktok_data(zip_file, locale="en"):
         extract_session_info,
         extract_direct_messages,
     ]
-    print(f"[LOG] extract_tiktok_data: Getting JSON data from file")
     data_list = get_json_data_from_file(zip_file)
-    print(f"[LOG] extract_tiktok_data: Got {len(data_list)} data items")
     if not data_list:
-        print(f"[LOG] extract_tiktok_data: No data found, returning empty list")
         return []
     for data in data_list:
         results = []
-        print(f"[LOG] extract_tiktok_data: Processing data with {len(extractors)} extractors")
-        for i, extractor in enumerate(extractors):
-            extractor_name = extractor.__name__
-            print(f"[LOG] extract_tiktok_data: Running extractor {i+1}/{len(extractors)}: {extractor_name}")
+        for extractor in extractors:
             try:
                 if extractor == extract_summary_data:
                     table = extractor(data, locale)
                 else:
                     table = extractor(data)
                 if table is not None:
-                    print(f"[LOG] extract_tiktok_data: Extractor {extractor_name} returned table")
                     results.append(table)
-                else:
-                    print(f"[LOG] extract_tiktok_data: Extractor {extractor_name} returned None")
             except Exception as e:
-                print(f"[LOG] extract_tiktok_data: ERROR in {extractor_name}: {type(e).__name__}: {str(e)}")
                 raise
-        print(f"[LOG] extract_tiktok_data: All extractors completed, returning {len(results)} results")
         return results
-    print(f"[LOG] extract_tiktok_data: No data processed, returning empty list")
     return []
 
 
@@ -1023,13 +949,9 @@ class DataDonationProcessor:
         self.meta_data.append(("debug", f"{self.platform}: {message}"))
 
     def extract_data(self, file):
-        print(f"[LOG] DataDonationProcessor.extract_data: Starting extraction")
-        result = self.extractor(file, self.locale)
-        print(f"[LOG] DataDonationProcessor.extract_data: Extraction complete, result type={type(result)}")
-        return result
+        return self.extractor(file, self.locale)
 
     def prompt_consent(self, data):
-        print(f"[LOG] DataDonationProcessor.prompt_consent: Starting with {len(data)} tables")
         log_title = props.Translatable(
             {
                 "en": "Log messages",
@@ -1047,13 +969,11 @@ class DataDonationProcessor:
                     "it": "Controlla i dati qui sotto. Puoi eliminare le informazioni che preferisci non condividere. La tua donazione sostiene il progetto di ricerca presentato in precedenza. Grazie!",
                     "nl": "Controleer de gegevens hieronder. Je kunt alle informatie verwijderen die je liever niet deelt. Je donatie ondersteunt het eerder geïntroduceerde onderzoeksproject. Dank je!",
                 }
-            )   
+            )
         )
 
-        print(f"[LOG] DataDonationProcessor.prompt_consent: Creating consent form tables")
         tables = []
         for i, table in enumerate(data, start=1):
-            print(f"[LOG] DataDonationProcessor.prompt_consent: Creating table {i}/{len(data)}: {table.id}")
             try:
                 consent_table = props.PropsUIPromptConsentFormTable(
                     id=table.id,
@@ -1064,15 +984,10 @@ class DataDonationProcessor:
                     headers=table.headers,
                 )
                 tables.append(consent_table)
-                print(f"[LOG] DataDonationProcessor.prompt_consent: Table {i} created successfully, DataFrame shape={table.data_frame.shape}")
             except Exception as e:
-                print(f"[LOG] DataDonationProcessor.prompt_consent: ERROR creating table {i}: {type(e).__name__}: {str(e)}")
                 raise
 
         self.log(f"prompt consent")
-        print(f"[LOG] DataDonationProcessor.prompt_consent: All {len(tables)} tables created")
-
-        print(f"[LOG] DataDonationProcessor.prompt_consent: Rendering donation page")
         consent_result = yield render_donation_page(
             self.platform,
             [description]
@@ -1093,7 +1008,6 @@ class DataDonationProcessor:
                 ),
             ],
         )
-        print(f"[LOG] DataDonationProcessor.prompt_consent: Donation page rendered")
 
         print(consent_result.__type__)
         print(consent_result.value)
@@ -1121,14 +1035,10 @@ tik_tok_data_donation = DataDonation(
 
 
 def process(data):
-    print(f"[LOG] process: Starting with data={data}")
     session_id = data.get("sessionId")
     locale = data.get("locale", "en")
-    print(f"[LOG] process: session_id={session_id}, locale={locale}")
     yield donate(f"{session_id}-tracking", '[{ "message": "user entered script" }]')
-    print(f"[LOG] process: Starting tik_tok_data_donation")
     yield from tik_tok_data_donation(session_id, locale)
-    print(f"[LOG] process: Completed")
 
 
 def render_donation_page(platform, body):
