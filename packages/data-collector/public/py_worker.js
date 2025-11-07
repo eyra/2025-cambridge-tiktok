@@ -95,11 +95,11 @@ function initialise() {
 }
 
 function startPyodide() {
-  importScripts("https://cdn.jsdelivr.net/pyodide/v0.24.0/full/pyodide.js");
+  importScripts("https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js");
 
   console.log("[ProcessingWorker] loading Pyodide");
   return loadPyodide({
-    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.0/full/",
+    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/",
   });
 }
 
