@@ -212,12 +212,21 @@ def get_comment_list_data(data):
     return get_in(data, "Comment", "Comments", "CommentsList")
 
 
-def get_date_filtered_items(items):
+def get_date_filtered_items(items, apply_filter=True):
+    """
+    Filter items by date, yielding (timestamp, item) tuples.
+
+    Args:
+        items: List of items with 'Date' field
+        apply_filter: If True, only yield items from the past 6 months
+
+    Returns:
+        Generator of (timestamp, item) tuples
+    """
     for item in items:
         timestamp = parse_datetime(item["Date"])
-        # TODO: remove this once the script is working
-        # if timestamp < filter_start:
-        #     continue
+        if apply_filter and timestamp < filter_start:
+            continue
         yield (timestamp, item)
 
 
@@ -321,8 +330,9 @@ def count_items(data, *key_path):
 
 
 def filtered_count(data, *key_path):
+    """Count items with date filtering applied (deprecated - use count_items for summary)"""
     items = get_list(data, *key_path)
-    filtered_items = get_date_filtered_items(items)
+    filtered_items = get_date_filtered_items(items, apply_filter=True)
     return len(list(filtered_items))
 
 
@@ -473,10 +483,21 @@ def extract_summary_data(data, locale="en"):
     )
 
 
-def extract_videos_viewed(data):
+def extract_videos_viewed(data, meta_data):
     videos = get_activity_video_browsing_list_data(data)
 
-    df = pd.DataFrame(videos, columns=["Date", "Link"])
+    # Track total count before filtering
+    total_count = len(videos)
+
+    # Apply date filter
+    filtered_videos = [item for _, item in get_date_filtered_items(videos, apply_filter=True)]
+    filtered_count = len(filtered_videos)
+
+    # Log if items were filtered out
+    if filtered_count < total_count:
+        meta_data.append(("info", f"Videos viewed: {filtered_count} of {total_count} items shown (filtered to past 6 months)"))
+
+    df = pd.DataFrame(filtered_videos, columns=["Date", "Link"])
     date = df["Date"].map(parse_datetime)
     df["Timeslot"] = (
         pd.Series(dtype="object") if date.empty else map_to_timeslot(date.dt.hour)
@@ -535,13 +556,23 @@ def extract_videos_viewed(data):
     )
 
 
-def extract_video_posts(data):
+def extract_video_posts(data, meta_data):
     video_list = get_in(data, "Video", "Videos", "VideoList")
     if video_list is None:
         video_list = get_in(data, "Post", "Posts", "VideoList")
     if video_list is None:
         return
-    videos = get_date_filtered_items(video_list)
+
+    # Track total count before filtering
+    total_count = len(video_list)
+
+    videos = list(get_date_filtered_items(video_list, apply_filter=True))
+    filtered_count = len(videos)
+
+    # Log if items were filtered out
+    if filtered_count < total_count:
+        meta_data.append(("info", f"Video posts: {filtered_count} of {total_count} items shown (filtered to past 6 months)"))
+
     post_stats = defaultdict(lambda: defaultdict(int))
     for date, video in videos:
         hourly_stats = post_stats[hourly_key(date)]
@@ -618,19 +649,37 @@ def extract_video_posts(data):
     )
 
 
-def extract_comments_and_likes(data):
+def extract_comments_and_likes(data, meta_data):
+    comments_list = get_list(data, "Comment", "Comments", "CommentsList")
+    total_comments = len(comments_list)
+
     comments = get_all_first(
-        get_date_filtered_items(get_list(data, "Comment", "Comments", "CommentsList"))
+        get_date_filtered_items(comments_list, apply_filter=True)
     )
+    comments = list(comments)
+    filtered_comments = len(comments)
+
+    # Log if items were filtered out
+    if filtered_comments < total_comments:
+        meta_data.append(("info", f"Comments: {filtered_comments} of {total_comments} items shown (filtered to past 6 months)"))
+
     comment_counts = get_count_by_date_key(comments, hourly_key)
 
+    likes_list = (get_list(data, "Activity", "Like List", "ItemFavoriteList")
+                  or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
+                  or get_list(data, "Likes and Favorites", "Like List", "ItemFavoriteList"))
+    total_likes = len(likes_list)
+
     likes_given = get_all_first(
-        get_date_filtered_items(
-            get_list(data, "Activity", "Like List", "ItemFavoriteList")
-            or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
-            or get_list(data, "Likes and Favorites", "Like List", "ItemFavoriteList")
-        )
+        get_date_filtered_items(likes_list, apply_filter=True)
     )
+    likes_given = list(likes_given)
+    filtered_likes = len(likes_given)
+
+    # Log if items were filtered out
+    if filtered_likes < total_likes:
+        meta_data.append(("info", f"Likes given: {filtered_likes} of {total_likes} items shown (filtered to past 6 months)"))
+
     likes_given_counts = get_count_by_date_key(likes_given, hourly_key)
     if not likes_given_counts:
         return
@@ -713,7 +762,7 @@ def extract_comments_and_likes(data):
     )
 
 
-def extract_session_info(data):
+def extract_session_info(data, meta_data):
     session_paths = [
         # Old
         ("Video", "Videos", "VideoList"),
@@ -726,7 +775,18 @@ def extract_session_info(data):
     ]
 
     item_lists = [get_list(data, *path) for path in session_paths]
-    dates = get_all_first(get_date_filtered_items(itertools.chain(*item_lists)))
+    all_items = list(itertools.chain(*item_lists))
+    total_count = len(all_items)
+
+    dates = get_all_first(get_date_filtered_items(all_items, apply_filter=True))
+    dates = list(dates)
+    filtered_count = len(dates)
+
+    # Log if items were filtered out
+    if filtered_count < total_count:
+        meta_data.append(("info", f"Session info: {filtered_count} of {total_count} activity items used (filtered to past 6 months)"))
+
+    dates = dates  # Already a list from above
 
     sessions = get_sessions(dates)
     df = pd.DataFrame(sessions, columns=["Start", "End", "Duration"])
@@ -783,7 +843,7 @@ def extract_session_info(data):
     )
 
 
-def extract_direct_messages(data):
+def extract_direct_messages(data, meta_data):
     history = get_in(data, "Direct Messages", "Chat History", "ChatHistory")
     if history is None:
         history = get_in(data, "Direct Message", "Direct Messages", "ChatHistory")
@@ -791,8 +851,25 @@ def extract_direct_messages(data):
     anon_ids = defaultdict(lambda: next(counter))
     # Ensure 1 is the ID of the donating user
     anon_ids[get_user_name(data)]
+
+    all_messages = list(flatten_chat_history(history))
+    total_count = len(all_messages)
+
+    # Filter messages by date
+    filtered_messages = []
+    for item in all_messages:
+        date = parse_datetime(item["Date"])
+        if date >= filter_start:
+            filtered_messages.append(item)
+
+    filtered_count = len(filtered_messages)
+
+    # Log if items were filtered out
+    if filtered_count < total_count:
+        meta_data.append(("info", f"Direct messages: {filtered_count} of {total_count} items shown (filtered to past 6 months)"))
+
     table = {"Anonymous ID": [], "Sent": []}
-    for item in flatten_chat_history(history):
+    for item in filtered_messages:
         table["Anonymous ID"].append(anon_ids[item["From"]])
         table["Sent"].append(parse_datetime(item["Date"]).strftime("%Y-%m-%d %H:%M"))
 
@@ -842,7 +919,11 @@ def extract_direct_messages(data):
     )
 
 
-def extract_tiktok_data(zip_file, locale="en"):
+def extract_tiktok_data(zip_file, locale="en", meta_data=None):
+    # Ensure meta_data always exists
+    if meta_data is None:
+        meta_data = []
+
     extractors = [
         extract_summary_data,
         extract_video_posts,
@@ -860,7 +941,7 @@ def extract_tiktok_data(zip_file, locale="en"):
             if extractor == extract_summary_data:
                 table = extractor(data, locale)
             else:
-                table = extractor(data)
+                table = extractor(data, meta_data)
             if table is not None:
                 results.append(table)
         return results
@@ -949,7 +1030,7 @@ class DataDonationProcessor:
         self.meta_data.append(("debug", f"{self.platform}: {message}"))
 
     def extract_data(self, file):
-        return self.extractor(file, self.locale)
+        return self.extractor(file, self.locale, self.meta_data)
 
     def prompt_consent(self, data):
         log_title = props.Translatable(

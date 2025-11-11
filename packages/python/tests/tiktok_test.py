@@ -2,10 +2,11 @@ import pytest
 import json
 import zipfile
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from port.script import extract_tiktok_data, ExtractionResult, get_json_data_from_file
 
 
+# Helper functions
 def create_test_zip(data):
     """Helper function to create a zip file in memory with test data"""
     zip_buffer = io.BytesIO()
@@ -15,21 +16,42 @@ def create_test_zip(data):
     return zip_buffer
 
 
-def test_extract_tiktok_data_empty_zip():
-    """Test extraction with empty zip file"""
-    empty_zip = create_test_zip({})
-    result = extract_tiktok_data(empty_zip, "en")
-    assert result == []
+def get_recent_date(days_ago=30, **time_kwargs):
+    """
+    Generate a recent date string (within past 6 months) for testing.
+
+    Args:
+        days_ago: Number of days in the past (default: 30)
+        **time_kwargs: Optional hour, minute, second overrides
+    """
+    base_date = datetime.now() - timedelta(days=days_ago)
+    if time_kwargs:
+        base_date = base_date.replace(**time_kwargs)
+    return base_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def test_extract_tiktok_data_valid_data():
-    """Test extraction with valid TikTok data"""
-    test_data = {
-        "Profile": {
-            "Profile Information": {
-                "ProfileMap": {"userName": "testuser", "likesReceived": 100}
-            }
-        },
+def create_base_profile(username="testuser", likes_received=None):
+    """Create a basic profile structure for testing."""
+    profile_map = {"userName": username}
+    if likes_received is not None:
+        profile_map["likesReceived"] = likes_received
+    return {"Profile": {"Profile Information": {"ProfileMap": profile_map}}}
+
+
+def get_extraction_result_by_id(results, result_id):
+    """Find an extraction result by its ID."""
+    return next((r for r in results if r.id == result_id), None)
+
+
+def assert_columns_exist(df, columns):
+    """Assert that all specified columns exist in the dataframe."""
+    assert all(col in df.columns for col in columns)
+
+
+def create_full_test_data():
+    """Create a complete test data structure with all sections."""
+    return {
+        **create_base_profile(likes_received=100),
         "Activity": {
             "Follower List": {"FansList": []},
             "Following List": {"Following": []},
@@ -41,14 +63,22 @@ def test_extract_tiktok_data_valid_data():
         "Direct Messages": {"Chat History": {"ChatHistory": {}}},
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+
+def test_extract_tiktok_data_empty_zip():
+    """Test extraction with empty zip file"""
+    empty_zip = create_test_zip({})
+    result = extract_tiktok_data(empty_zip, "en")
+    assert result == []
+
+
+def test_extract_tiktok_data_valid_data():
+    """Test extraction with valid TikTok data"""
+    result = extract_tiktok_data(create_test_zip(create_full_test_data()), "en")
 
     assert len(result) > 0
     assert all(isinstance(item, ExtractionResult) for item in result)
 
-    # Check if summary data is present
-    summary_data = next((r for r in result if r.id == "tiktok_summary"), None)
+    summary_data = get_extraction_result_by_id(result, "tiktok_summary")
     assert summary_data is not None
     assert summary_data.title is not None
     assert len(summary_data.data_frame) > 0
@@ -56,9 +86,9 @@ def test_extract_tiktok_data_valid_data():
 
 def test_extract_tiktok_data_with_messages():
     """Test extraction with direct messages data"""
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_time = get_recent_date()
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Direct Messages": {
             "Chat History": {
                 "ChatHistory": {
@@ -71,15 +101,12 @@ def test_extract_tiktok_data_with_messages():
         },
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find direct messages result
-    messages_data = next((r for r in result if r.id == "tiktok_direct_messages"), None)
+    messages_data = get_extraction_result_by_id(result, "tiktok_direct_messages")
     assert messages_data is not None
     assert len(messages_data.data_frame) == 2
-    assert "Anonymous ID" in messages_data.data_frame.columns
-    assert "Sent" in messages_data.data_frame.columns
+    assert_columns_exist(messages_data.data_frame, ["Anonymous ID", "Sent"])
 
 
 def test_extract_tiktok_data_invalid_json():
@@ -95,122 +122,93 @@ def test_extract_tiktok_data_invalid_json():
 
 def test_extract_tiktok_data_with_video_posts():
     """Test extraction with video posts data"""
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
-        "Video": {"Videos": {"VideoList": [{"Date": current_time, "Likes": "10"}]}},
+        **create_base_profile(),
+        "Video": {"Videos": {"VideoList": [{"Date": get_recent_date(), "Likes": "10"}]}},
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find video posts result
-    video_data = next((r for r in result if r.id == "tiktok_posts"), None)
+    video_data = get_extraction_result_by_id(result, "tiktok_posts")
     assert video_data is not None
     assert len(video_data.data_frame) > 0
-    assert "Videos" in video_data.data_frame.columns
-    assert "Likes received" in video_data.data_frame.columns
+    assert_columns_exist(video_data.data_frame, ["Videos", "Likes received"])
 
 
 def test_extract_videos_viewed():
     """Test extraction of viewed videos data"""
+    recent_date1 = get_recent_date(hour=15, minute=20, second=38)
+    recent_date2 = get_recent_date(hour=18, minute=21, second=38)
+
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Activity": {
             "Video Browsing History": {
                 "VideoList": [
-                    {
-                        "Date": "2024-12-20 15:20:38",
-                        "Link": "https://www.tiktokv.com/share/video/1111111111111111111/",
-                    },
-                    {
-                        "Date": "2024-12-20 18:21:38",
-                        "Link": "https://www.tiktokv.com/share/video/2222222222222222222/",
-                    },
+                    {"Date": recent_date1, "Link": "https://www.tiktokv.com/share/video/1111111111111111111/"},
+                    {"Date": recent_date2, "Link": "https://www.tiktokv.com/share/video/2222222222222222222/"},
                 ]
             }
         },
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find videos viewed result
-    videos_viewed = next((r for r in result if r.id == "tiktok_videos_viewed"), None)
+    videos_viewed = get_extraction_result_by_id(result, "tiktok_videos_viewed")
     assert videos_viewed is not None
     assert len(videos_viewed.data_frame) == 2
-    assert all(
-        col in videos_viewed.data_frame.columns for col in ["Date", "Timeslot", "Link"]
-    )
+    assert_columns_exist(videos_viewed.data_frame, ["Date", "Timeslot", "Link"])
     # Data is sorted newest first, so the 18:21 video should be first
-    assert (
-        videos_viewed.data_frame.iloc[0]["Link"]
-        == "https://www.tiktokv.com/share/video/2222222222222222222/"
-    )
-    assert videos_viewed.data_frame.iloc[0]["Date"] == "2024-12-20 18:21:38"
+    assert videos_viewed.data_frame.iloc[0]["Link"] == "https://www.tiktokv.com/share/video/2222222222222222222/"
+    assert videos_viewed.data_frame.iloc[0]["Date"] == recent_date2
 
 
 def test_extract_session_info():
     """Test extraction of session information"""
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Activity": {
             "Video Browsing History": {
                 "VideoList": [
-                    {"Date": "2024-12-20 15:20:38"},
-                    {"Date": "2024-12-20 15:21:38"},  # Same session
-                    {"Date": "2024-12-20 18:21:38"},  # New session (> 5 min gap)
+                    {"Date": get_recent_date(hour=15, minute=20, second=38)},
+                    {"Date": get_recent_date(hour=15, minute=21, second=38)},  # Same session
+                    {"Date": get_recent_date(hour=18, minute=21, second=38)},  # New session (> 5 min gap)
                 ]
             }
         },
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find session info result
-    session_info = next((r for r in result if r.id == "tiktok_session_info"), None)
+    session_info = get_extraction_result_by_id(result, "tiktok_session_info")
     assert session_info is not None
     assert len(session_info.data_frame) == 2  # Should have 2 sessions
-    assert all(
-        col in session_info.data_frame.columns
-        for col in ["Start", "Duration (in minutes)"]
-    )
+    assert_columns_exist(session_info.data_frame, ["Start", "Duration (in minutes)"])
 
 
 def test_extract_comments_and_likes():
     """Test extraction of comments and likes data"""
+    recent_date = get_recent_date()
+
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Comment": {
             "Comments": {
                 "CommentsList": [
-                    {
-                        "date": "2023-10-31 08:04:12",
-                        "comment": "Great post! 📚",
-                        "photo": "N/A",
-                        "url": "",
-                    }
+                    {"Date": recent_date, "comment": "Great post! 📚", "photo": "N/A", "url": ""}
                 ]
             }
         },
         "Activity": {
-            "Like List": {"ItemFavoriteList": [{"Date": "2023-10-31 08:04:12"}]}
+            "Like List": {"ItemFavoriteList": [{"Date": recent_date}]}
         },
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find comments and likes result
-    comments_likes = next(
-        (r for r in result if r.id == "tiktok_comments_and_likes"), None
-    )
+    comments_likes = get_extraction_result_by_id(result, "tiktok_comments_and_likes")
     assert comments_likes is not None
-    assert all(
-        col in comments_likes.data_frame.columns
-        for col in ["Date", "Timeslot", "Comment posts", "Likes given"]
-    )
+    assert_columns_exist(comments_likes.data_frame, ["Date", "Timeslot", "Comment posts", "Likes given"])
     assert comments_likes.data_frame["Comment posts"].sum() > 0
     assert comments_likes.data_frame["Likes given"].sum() > 0
 
@@ -218,27 +216,25 @@ def test_extract_comments_and_likes():
 def test_extract_direct_messages():
     """Test extraction of direct messages"""
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Direct Messages": {
             "Chat History": {
                 "ChatHistory": {
                     "chat1": [
-                        {"From": "testuser", "Date": "2024-12-20 15:20:38"},
-                        {"From": "otheruser", "Date": "2024-12-20 15:21:38"},
+                        {"From": "testuser", "Date": get_recent_date(hour=15, minute=20, second=38)},
+                        {"From": "otheruser", "Date": get_recent_date(hour=15, minute=21, second=38)},
                     ]
                 }
             }
         },
     }
 
-    test_zip = create_test_zip(test_data)
-    result = extract_tiktok_data(test_zip, "en")
+    result = extract_tiktok_data(create_test_zip(test_data), "en")
 
-    # Find direct messages result
-    messages = next((r for r in result if r.id == "tiktok_direct_messages"), None)
+    messages = get_extraction_result_by_id(result, "tiktok_direct_messages")
     assert messages is not None
     assert len(messages.data_frame) == 2
-    assert all(col in messages.data_frame.columns for col in ["Anonymous ID", "Sent"])
+    assert_columns_exist(messages.data_frame, ["Anonymous ID", "Sent"])
     # Check that testuser (the owner) gets ID 1
     assert 1 in messages.data_frame["Anonymous ID"].values
 
@@ -279,108 +275,67 @@ def test_extract_tiktok_data_alternate_profile_structure():
 
 def test_extract_tiktok_data_with_locale():
     """Test extraction with different locales to verify translation functionality"""
-    test_data = {
-        "Profile": {
-            "Profile Information": {
-                "ProfileMap": {"userName": "testuser", "likesReceived": 100}
-            }
-        },
-        "Activity": {
-            "Follower List": {"FansList": []},
-            "Following List": {"Following": []},
-            "Like List": {"ItemFavoriteList": []},
-            "Video Browsing History": {"VideoList": []},
-        },
-        "Video": {"Videos": {"VideoList": []}},
-        "Comment": {"Comments": {"CommentsList": []}},
-        "Direct Messages": {"Chat History": {"ChatHistory": {}}},
-    }
+    test_data = create_full_test_data()
 
-    # Test English locale
-    test_zip_en = create_test_zip(test_data)
-    result_en = extract_tiktok_data(test_zip_en, "en")
-    summary_en = next((r for r in result_en if r.id == "tiktok_summary"), None)
-    assert "Followers" in summary_en.data_frame["Description"].values
-    assert "Videos published" in summary_en.data_frame["Description"].values
+    # Test locales with expected translations
+    locale_tests = [
+        ("en", "Followers", "Videos published"),
+        ("de", "Follower", "Veröffentlichte Videos"),
+        ("it", "Follower", "Video pubblicati"),
+        ("nl", "Volgers", "Gepubliceerde video's"),
+    ]
 
-    # Test German locale
-    test_zip_de = create_test_zip(test_data)
-    result_de = extract_tiktok_data(test_zip_de, "de")
-    summary_de = next((r for r in result_de if r.id == "tiktok_summary"), None)
-    assert "Follower" in summary_de.data_frame["Description"].values
-    assert "Veröffentlichte Videos" in summary_de.data_frame["Description"].values
-
-    # Test Italian locale
-    test_zip_it = create_test_zip(test_data)
-    result_it = extract_tiktok_data(test_zip_it, "it")
-    summary_it = next((r for r in result_it if r.id == "tiktok_summary"), None)
-    assert "Follower" in summary_it.data_frame["Description"].values
-    assert "Video pubblicati" in summary_it.data_frame["Description"].values
-
-    # Test Dutch locale
-    test_zip_nl = create_test_zip(test_data)
-    result_nl = extract_tiktok_data(test_zip_nl, "nl")
-    summary_nl = next((r for r in result_nl if r.id == "tiktok_summary"), None)
-    assert "Volgers" in summary_nl.data_frame["Description"].values
-    assert "Gepubliceerde video's" in summary_nl.data_frame["Description"].values
+    for locale, expected_followers, expected_videos in locale_tests:
+        result = extract_tiktok_data(create_test_zip(test_data), locale)
+        summary = get_extraction_result_by_id(result, "tiktok_summary")
+        assert expected_followers in summary.data_frame["Description"].values
+        assert expected_videos in summary.data_frame["Description"].values
 
     # Test fallback to English for unsupported locale
-    test_zip_unsupported = create_test_zip(test_data)
-    result_unsupported = extract_tiktok_data(test_zip_unsupported, "fr")
-    summary_unsupported = next((r for r in result_unsupported if r.id == "tiktok_summary"), None)
-    assert "Followers" in summary_unsupported.data_frame["Description"].values  # Should fall back to English
+    result_unsupported = extract_tiktok_data(create_test_zip(test_data), "fr")
+    summary_unsupported = get_extraction_result_by_id(result_unsupported, "tiktok_summary")
+    assert "Followers" in summary_unsupported.data_frame["Description"].values
 
 
 def test_get_json_data_from_file_with_zip_file_like_object():
     """Test that get_json_data_from_file correctly detects zip files without loading entire file as JSON"""
-    test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}}
-    }
-    zip_buffer = create_test_zip(test_data)
-
-    result = get_json_data_from_file(zip_buffer)
+    test_data = create_base_profile()
+    result = get_json_data_from_file(create_test_zip(test_data))
 
     assert len(result) == 1
-    assert result[0].get("Profile", {}).get("Profile Information", {}).get("ProfileMap", {}).get("userName") == "testuser"
+    assert result[0]["Profile"]["Profile Information"]["ProfileMap"]["userName"] == "testuser"
 
 
 def test_get_json_data_from_file_with_json_file_like_object():
     """Test that get_json_data_from_file correctly handles plain JSON file-like objects"""
-    test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}}
-    }
+    test_data = create_base_profile()
     json_buffer = io.StringIO(json.dumps(test_data))
 
     result = get_json_data_from_file(json_buffer)
 
     assert len(result) == 1
-    assert result[0].get("Profile", {}).get("Profile Information", {}).get("ProfileMap", {}).get("userName") == "testuser"
+    assert result[0]["Profile"]["Profile Information"]["ProfileMap"]["userName"] == "testuser"
 
 
 def test_get_json_data_from_file_with_large_zip_memory_efficiency():
     """Test that large zip files don't get loaded into memory as JSON first"""
-    # Create a large-ish test data structure
     test_data = {
-        "Profile": {"Profile Information": {"ProfileMap": {"userName": "testuser"}}},
+        **create_base_profile(),
         "Activity": {
             "Video Browsing History": {
                 "VideoList": [
-                    {"Date": "2024-12-20 15:20:38", "Link": f"https://example.com/video/{i}"}
+                    {"Date": get_recent_date(), "Link": f"https://example.com/video/{i}"}
                     for i in range(1000)
                 ]
             }
         }
     }
 
-    zip_buffer = create_test_zip(test_data)
-
-    # This should not attempt to load the zip file as JSON first
-    # If it does, it would fail or be very slow
-    result = get_json_data_from_file(zip_buffer)
+    result = get_json_data_from_file(create_test_zip(test_data))
 
     assert len(result) == 1
-    assert result[0].get("Profile", {}).get("Profile Information", {}).get("ProfileMap", {}).get("userName") == "testuser"
-    assert len(result[0].get("Activity", {}).get("Video Browsing History", {}).get("VideoList", [])) == 1000
+    assert result[0]["Profile"]["Profile Information"]["ProfileMap"]["userName"] == "testuser"
+    assert len(result[0]["Activity"]["Video Browsing History"]["VideoList"]) == 1000
 
 
 def test_get_json_data_from_file_with_invalid_file():
