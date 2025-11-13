@@ -85,6 +85,9 @@ filter_start = datetime.datetime.now() - datetime.timedelta(weeks=4 * 6)
 
 datetime_format = "%Y-%m-%d %H:%M:%S"
 
+# Maximum number of rows to include in any table
+MAX_TABLE_ROWS = 7000
+
 i18n_table = {
     "followers": {
         "en": "Followers",
@@ -139,6 +142,48 @@ i18n_table = {
         "de": "Angesehene Videos",
         "it": "Video visualizzati",
         "nl": "Bekeken video's"
+    },
+    "videos_viewed_recent": {
+        "en": "Videos viewed (past 6 months)",
+        "de": "Angesehene Videos (letzte 6 Monate)",
+        "it": "Video visualizzati (ultimi 6 mesi)",
+        "nl": "Bekeken video's (afgelopen 6 maanden)"
+    },
+    "video_posts_recent": {
+        "en": "Video posts (past 6 months)",
+        "de": "Videobeiträge (letzte 6 Monate)",
+        "it": "Video pubblicati (ultimi 6 mesi)",
+        "nl": "Videoposts (afgelopen 6 maanden)"
+    },
+    "likes_given_recent": {
+        "en": "Likes given (past 6 months)",
+        "de": "Vergebene Likes (letzte 6 Monate)",
+        "it": "Mi piace messi (ultimi 6 mesi)",
+        "nl": "Gegeven likes (afgelopen 6 maanden)"
+    },
+    "comments_published_recent": {
+        "en": "Comments published (past 6 months)",
+        "de": "Veröffentlichte Kommentare (letzte 6 Monate)",
+        "it": "Commenti pubblicati (ultimi 6 mesi)",
+        "nl": "Gepubliceerde reacties (afgelopen 6 maanden)"
+    },
+    "messages_sent_recent": {
+        "en": "Messages sent (past 6 months)",
+        "de": "Gesendete Nachrichten (letzte 6 Monate)",
+        "it": "Messaggi inviati (ultimi 6 mesi)",
+        "nl": "Verzonden berichten (afgelopen 6 maanden)"
+    },
+    "messages_received_recent": {
+        "en": "Messages received (past 6 months)",
+        "de": "Empfangene Nachrichten (letzte 6 Monate)",
+        "it": "Messaggi ricevuti (ultimi 6 mesi)",
+        "nl": "Ontvangen berichten (afgelopen 6 maanden)"
+    },
+    "sessions_recent": {
+        "en": "Sessions (past 6 months)",
+        "de": "Sitzungen (letzte 6 Monate)",
+        "it": "Sessioni (ultimi 6 mesi)",
+        "nl": "Sessies (afgelopen 6 maanden)"
     }
 }
 
@@ -373,7 +418,7 @@ def map_to_timeslot(series):
     return series.map(lambda hour: f"{hour}-{hour+1}")
 
 
-def extract_summary_data(data, locale="en"):
+def extract_summary_data(data, locale="en", meta_data=None):
     user_name = get_user_name(data)
     chat_history = get_chat_history(data)
     flattened = flatten_chat_history(chat_history)
@@ -390,6 +435,50 @@ def extract_summary_data(data, locale="en"):
         )
     )
 
+    # Calculate filtered counts (past 6 months)
+    # Videos viewed (past 6 months)
+    videos = get_activity_video_browsing_list_data(data)
+    videos_viewed_recent = len(list(get_date_filtered_items(videos, apply_filter=True)))
+
+    # Video posts (past 6 months)
+    video_list = get_in(data, "Video", "Videos", "VideoList") or get_in(data, "Post", "Posts", "VideoList") or []
+    video_posts_recent = len(list(get_date_filtered_items(video_list, apply_filter=True)))
+
+    # Likes given (past 6 months)
+    likes_list = (get_list(data, "Activity", "Like List", "ItemFavoriteList")
+                  or get_list(data, "Your Activity", "Like List", "ItemFavoriteList")
+                  or get_list(data, "Likes and Favorites", "Like List", "ItemFavoriteList"))
+    likes_given_recent = len(list(get_date_filtered_items(likes_list, apply_filter=True)))
+
+    # Comments published (past 6 months)
+    comments_list = get_list(data, "Comment", "Comments", "CommentsList")
+    comments_published_recent = len(list(get_date_filtered_items(comments_list, apply_filter=True)))
+
+    # Messages sent/received (past 6 months)
+    filtered_messages = []
+    for item in direct_messages:
+        date = parse_datetime(item["Date"])
+        if date >= filter_start:
+            filtered_messages.append(item)
+
+    sent_count_recent = len([msg for msg in filtered_messages if msg["From"] == user_name])
+    received_count_recent = len([msg for msg in filtered_messages if msg["From"] != user_name])
+
+    # Sessions (past 6 months)
+    session_paths = [
+        ("Video", "Videos", "VideoList"),
+        ("Activity", "Video Browsing History", "VideoList"),
+        ("Comment", "Comments", "CommentsList"),
+        ("Post", "Posts", "VideoList"),
+        ("Your Activity", "Favorite Videos", "FavoriteVideoList"),
+        ("Your Activity", "Watch History", "VideoList"),
+    ]
+    item_lists = [get_list(data, *path) for path in session_paths]
+    all_items = list(itertools.chain(*item_lists))
+    dates = list(get_all_first(get_date_filtered_items(all_items, apply_filter=True)))
+    sessions = get_sessions(dates)
+    sessions_recent = len(sessions)
+
     summary_data = {
         "Description": [
             get_translated_text("followers", locale),
@@ -401,6 +490,14 @@ def extract_summary_data(data, locale="en"):
             get_translated_text("messages_sent", locale),
             get_translated_text("messages_received", locale),
             get_translated_text("videos_viewed", locale),
+            # Recent activity (past 6 months)
+            get_translated_text("videos_viewed_recent", locale),
+            get_translated_text("video_posts_recent", locale),
+            get_translated_text("likes_given_recent", locale),
+            get_translated_text("comments_published_recent", locale),
+            get_translated_text("messages_sent_recent", locale),
+            get_translated_text("messages_received_recent", locale),
+            get_translated_text("sessions_recent", locale),
         ],
         "Number": [
             count_items(data, "Activity", "Follower List", "FansList")
@@ -438,6 +535,14 @@ def extract_summary_data(data, locale="en"):
             received_count,
             count_items(data, "Activity", "Video Browsing History", "VideoList")
             or count_items(data, "Your Activity", "Watch History", "VideoList"),
+            # Recent activity (past 6 months)
+            videos_viewed_recent,
+            video_posts_recent,
+            likes_given_recent,
+            comments_published_recent,
+            sent_count_recent,
+            received_count_recent,
+            sessions_recent,
         ],
     }
 
@@ -505,6 +610,11 @@ def extract_videos_viewed(data, meta_data):
     df = df.reindex(columns=["Date", "Timeslot", "Link"])
     # Sort by date and timeslot (newest first)
     df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
+
+    # Limit to MAX_TABLE_ROWS
+    if len(df) > MAX_TABLE_ROWS:
+        meta_data.append(("info", f"Videos viewed: Limited to {MAX_TABLE_ROWS} most recent items (out of {len(df)} total)"))
+        df = df.head(MAX_TABLE_ROWS)
 
     description = props.Translatable(
         {
@@ -590,6 +700,11 @@ def extract_video_posts(data, meta_data):
     df = df.reindex(columns=["Date", "Timeslot", "Videos", "Likes received"])
     # Sort by date and timeslot (newest first)
     df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
+
+    # Limit to MAX_TABLE_ROWS
+    if len(df) > MAX_TABLE_ROWS:
+        meta_data.append(("info", f"Video posts: Limited to {MAX_TABLE_ROWS} most recent items (out of {len(df)} total)"))
+        df = df.head(MAX_TABLE_ROWS)
 
     description = props.Translatable(
         {
@@ -704,6 +819,11 @@ def extract_comments_and_likes(data, meta_data):
     # Sort by date and timeslot (newest first)
     df = df.sort_values(by=["Date", "Timeslot"], ascending=False).reset_index(drop=True)
 
+    # Limit to MAX_TABLE_ROWS
+    if len(df) > MAX_TABLE_ROWS:
+        meta_data.append(("info", f"Comments and likes: Limited to {MAX_TABLE_ROWS} most recent items (out of {len(df)} total)"))
+        df = df.head(MAX_TABLE_ROWS)
+
     description = props.Translatable(
         {
             "en": "This table contains the number of likes you gave and comments you made.",
@@ -801,6 +921,11 @@ def extract_session_info(data, meta_data):
     # Sort by start date (newest first)
     df = df.sort_values(by=["Start"], ascending=False).reset_index(drop=True)
 
+    # Limit to MAX_TABLE_ROWS
+    if len(df) > MAX_TABLE_ROWS:
+        meta_data.append(("info", f"Session info: Limited to {MAX_TABLE_ROWS} most recent items (out of {len(df)} total)"))
+        df = df.head(MAX_TABLE_ROWS)
+
     description = props.Translatable(
         {
             "en": "This table contains the start date and duration of your TikTok sessions.",
@@ -886,6 +1011,11 @@ def extract_direct_messages(data, meta_data):
         by=["Sent"], ascending=False
     ).reset_index(drop=True)
 
+    # Limit to MAX_TABLE_ROWS
+    if len(table) > MAX_TABLE_ROWS:
+        meta_data.append(("info", f"Direct messages: Limited to {MAX_TABLE_ROWS} most recent items (out of {len(table)} total)"))
+        table = table.head(MAX_TABLE_ROWS)
+
     return ExtractionResult(
         "tiktok_direct_messages",
         props.Translatable(
@@ -939,7 +1069,7 @@ def extract_tiktok_data(zip_file, locale="en", meta_data=None):
         results = []
         for extractor in extractors:
             if extractor == extract_summary_data:
-                table = extractor(data, locale)
+                table = extractor(data, locale, meta_data)
             else:
                 table = extractor(data, meta_data)
             if table is not None:
