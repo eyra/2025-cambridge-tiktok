@@ -83,10 +83,10 @@ class CaseInsensitiveDict(MutableMapping):
 
 filter_start = datetime.datetime.now() - datetime.timedelta(weeks=4 * 6)
 
-datetime_format = "%Y-%m-%d %H:%M:%S"
+datetime_formats = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S UTC")
 
 # Maximum number of rows to include in any table
-MAX_TABLE_ROWS = 7000
+MAX_TABLE_ROWS = 50000
 
 i18n_table = {
     "followers": {
@@ -208,7 +208,12 @@ def get_translated_text(key, locale="en"):
 
 
 def parse_datetime(value):
-    return datetime.datetime.strptime(value, datetime_format)
+    for datetime_format in datetime_formats:
+        try:
+            return datetime.datetime.strptime(value, datetime_format)
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognized TikTok datetime format: {value!r}")
 
 
 def get_in(data_dict, *key_path):

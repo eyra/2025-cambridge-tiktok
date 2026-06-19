@@ -3,7 +3,12 @@ import json
 import zipfile
 import io
 from datetime import datetime, timedelta
-from port.script import extract_tiktok_data, ExtractionResult, get_json_data_from_file
+from port.script import (
+    extract_tiktok_data,
+    ExtractionResult,
+    get_json_data_from_file,
+    parse_datetime,
+)
 
 
 # Helper functions
@@ -357,3 +362,18 @@ def test_get_json_data_from_file_with_empty_zip():
     result = get_json_data_from_file(empty_zip)
 
     assert result == []
+
+
+def test_parse_datetime_without_utc_suffix():
+    """Legacy TikTok export format (no timezone suffix)."""
+    assert parse_datetime("2025-04-23 10:26:35") == datetime(2025, 4, 23, 10, 26, 35)
+
+
+def test_parse_datetime_with_utc_suffix():
+    """TikTok export format from mid-2026 onwards includes a ' UTC' suffix."""
+    assert parse_datetime("2025-04-23 10:26:35 UTC") == datetime(2025, 4, 23, 10, 26, 35)
+
+
+def test_parse_datetime_unknown_format_raises():
+    with pytest.raises(ValueError, match="Unrecognized TikTok datetime format"):
+        parse_datetime("23/04/2025 10:26:35")
