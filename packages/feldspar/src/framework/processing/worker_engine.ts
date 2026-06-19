@@ -1,27 +1,56 @@
 import { CommandHandler } from '../types/modules'
 import { CommandSystemEvent, isCommand, Response } from '../types/commands'
+import { Logger, LogLevel } from '../logging'
 
-export default class WorkerProcessingEngine  {
+const VALID_LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error']
+
+function toLogLevel (value: unknown): LogLevel {
+  return VALID_LOG_LEVELS.includes(value as LogLevel) ? (value as LogLevel) : 'info'
+}
+
+// CAMBRIDGE-FORK: This file diverges from upstream Feldspar — `locale` is
+// threaded through to the Python worker so the donation script can localize
+// DataFrame column headers. The constructor accepts a `locale` and
+// `firstRunCycle` posts `data: {sessionId, locale}` instead of just
+// `sessionId`. See port/script.py `process(data)`, port/main.py `start(data)`,
+// py_worker.js (event.data.data), assembly.ts, and script_host_component.tsx
+// for the matching divergences. When syncing feldspar/develop, keep all five.
+export default class WorkerProcessingEngine {
   sessionId: String
   locale: String
   worker: Worker
   commandHandler: CommandHandler
+  logger?: Logger
 
   resolveInitialized!: () => void
   resolveContinue!: () => void
 
-  constructor (sessionId: string, locale: string, worker: Worker, commandHandler: CommandHandler) {
+  constructor (
+    sessionId: string,
+    locale: string,
+    worker: Worker,
+    commandHandler: CommandHandler,
+    logger?: Logger
+  ) {
     this.sessionId = sessionId
     this.locale = locale
     this.commandHandler = commandHandler
     this.worker = worker
-    this.worker.onerror = console.log
+    this.logger = logger
+    this.initWorkerEventHandlers()
+  }
+
+  private initWorkerEventHandlers (): void {
     this.worker.onmessage = (event) => {
-      console.log(
-        '[WorkerProcessingEngine] Received event from worker: ',
-        event.data.eventType
-      )
+      this.logger?.log('debug', `Received event from worker: ${event.data.eventType}`)
       this.handleEvent(event)
+    }
+    this.worker.onerror = (error) => {
+      this.logger?.log('error', `Worker error: ${error.message}`, {
+        filename: error.filename,
+        lineno: error.lineno,
+        colno: error.colno,
+      })
     }
   }
 
@@ -35,27 +64,33 @@ export default class WorkerProcessingEngine  {
 
   handleEvent (event: any): void {
     const { eventType } = event.data
-    console.log('[ReactEngine] received eventType: ', eventType)
     switch (eventType) {
       case 'initialiseDone':
-        console.log('[ReactEngine] received: initialiseDone')
+        this.logger?.log('debug', 'Worker initialisation done')
         this.resolveInitialized()
         break
 
       case 'runCycleDone':
-        console.log('[ReactEngine] received: event', event.data.scriptEvent)
+        this.logger?.log('debug', 'Worker run cycle done')
         this.handleRunCycle(event.data.scriptEvent)
         break
+
+      case 'error':
+        this.logger?.log('error', `Python error: ${event.data.error}`, { stack: event.data.stack })
+        break
+
+      case 'workerLog':
+        this.logger?.log(toLogLevel(event.data.level), event.data.message)
+        break
+
       default:
-        console.log(
-          '[ReactEngine] received unsupported flow event: ',
-          eventType
-        )
+        this.logger?.log('warn', `Received unsupported worker event: ${eventType}`)
     }
+    this.logger?.flush()
   }
 
   start (): void {
-    console.log('[WorkerProcessingEngine] started')
+    this.logger?.log('debug', 'Worker started')
     const waitForInitialization: Promise<void> = this.waitForInitialization()
 
     waitForInitialization.then(
@@ -70,23 +105,21 @@ export default class WorkerProcessingEngine  {
   async waitForInitialization (): Promise<void> {
     return await new Promise<void>((resolve) => {
       this.resolveInitialized = resolve
-      console.debug('[WorkerProcessingEngine] waiting for initialisation')
+      this.logger?.log('debug', 'Waiting for worker initialisation')
       this.worker.postMessage({ eventType: 'initialise' })
     })
   }
 
   firstRunCycle (): void {
+    // CAMBRIDGE-FORK: nested `data: {sessionId, locale}` instead of upstream's
+    // flat `sessionId` — see class-level comment.
     this.worker.postMessage({
       eventType: 'firstRunCycle',
-      data: {
-        sessionId: this.sessionId,
-        locale: this.locale
-      }
+      data: { sessionId: this.sessionId, locale: this.locale }
     })
   }
 
   nextRunCycle (response: Response): void {
-    console.log('[WorkerProcessingEngine] nextRunCycle');
     this.worker.postMessage({ eventType: 'nextRunCycle', response })
   }
 
