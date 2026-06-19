@@ -1249,6 +1249,13 @@ tik_tok_data_donation = DataDonation(
 
 
 def process(data):
+    # CAMBRIDGE-FORK: `data` is a {sessionId, locale} dict (not a bare sessionId
+    # like upstream Feldspar's demo). Locale is threaded all the way from the
+    # browser URL to here so that `extract_summary_data` can render the
+    # `Description` column of the consent-form summary table in the user's
+    # language. Keep this contract in sync with the matching divergences in
+    # main.py, py_worker.js, assembly.ts, worker_engine.ts, and
+    # script_host_component.tsx.
     session_id = data.get("sessionId")
     locale = data.get("locale", "en")
     yield donate(f"{session_id}-tracking", '[{ "message": "user entered script" }]')
