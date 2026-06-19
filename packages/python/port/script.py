@@ -374,6 +374,21 @@ def get_json_data_from_file(file_):
         return []
 
 
+def is_html_format(zip_file):
+    """True if the upload is a TikTok HTML-format export (zip of .html with no .json)."""
+    try:
+        with zipfile.ZipFile(zip_file, "r") as zip:
+            namelist = zip.namelist()
+            has_html = any(name.lower().endswith(".html") for name in namelist)
+            has_json = any(name.lower().endswith(".json") for name in namelist)
+            return has_html and not has_json
+    except (zipfile.BadZipFile, IOError):
+        return False
+    finally:
+        if hasattr(zip_file, "seek"):
+            zip_file.seek(0)
+
+
 def count_items(data, *key_path):
     items = get_list(data, *key_path)
     return len(items)
@@ -1059,6 +1074,9 @@ def extract_tiktok_data(zip_file, locale="en", meta_data=None):
     if meta_data is None:
         meta_data = []
 
+    if is_html_format(zip_file):
+        raise HtmlFormatError("TikTok data export is in HTML format, JSON format is required")
+
     extractors = [
         extract_summary_data,
         extract_video_posts,
@@ -1096,6 +1114,10 @@ class InvalidFileError(Exception):
     """Indicates that the file does not match expectations."""
 
 
+class HtmlFormatError(Exception):
+    """Indicates the upload is a TikTok HTML-format export (JSON is required)."""
+
+
 class SkipToNextStep(Exception):
     pass
 
@@ -1128,6 +1150,12 @@ class DataDonationProcessor:
                         continue
                     else:
                         return
+                except HtmlFormatError:
+                    self.log(f"HTML format detected - prompting for retry with instructions")
+                    if (yield from self.prompt_html_format_retry()):
+                        continue
+                    yield donate(f"{self.session_id}-html-format-attempt", '[{ "message": "HTML format upload attempted" }]')
+                    return
                 else:
                     if extraction_result is None:
                         try_again = yield from self.prompt_retry()
@@ -1142,6 +1170,12 @@ class DataDonationProcessor:
     def prompt_retry(self):
         retry_result = yield render_donation_page(
             self.platform, [retry_confirmation(self.platform)]
+        )
+        return retry_result.__type__ == "PayloadTrue"
+
+    def prompt_html_format_retry(self):
+        retry_result = yield render_donation_page(
+            self.platform, [html_format_retry_confirmation(self.platform)]
         )
         return retry_result.__type__ == "PayloadTrue"
 
@@ -1300,6 +1334,34 @@ def retry_confirmation(platform):
             "de": "Weiter",
             "it": "Continua",
             "nl": "Doorgaan",
+        }
+    )
+    return props.PropsUIPromptConfirm(text, ok, cancel)
+
+
+def html_format_retry_confirmation(platform):
+    text = props.Translatable(
+        {
+            "en": "The uploaded file contains TikTok data in HTML format, but we need JSON format. Please re-download your data from TikTok and select JSON as the file format.",
+            "de": "Die hochgeladene Datei enthält TikTok-Daten im HTML-Format, aber wir benötigen das JSON-Format. Bitte laden Sie Ihre Daten erneut von TikTok herunter und wählen Sie JSON als Dateiformat aus.",
+            "it": "Il file caricato contiene dati TikTok in formato HTML, ma abbiamo bisogno del formato JSON. Scarica di nuovo i tuoi dati da TikTok e seleziona JSON come formato del file.",
+            "nl": "Het geüploade bestand bevat TikTok-gegevens in HTML-formaat, maar we hebben JSON-formaat nodig. Download je gegevens opnieuw van TikTok en selecteer JSON als bestandsformaat.",
+        }
+    )
+    ok = props.Translatable(
+        {
+            "en": "Try again with JSON format",
+            "de": "Erneut mit JSON-Format versuchen",
+            "it": "Riprova con formato JSON",
+            "nl": "Probeer opnieuw met JSON-formaat",
+        }
+    )
+    cancel = props.Translatable(
+        {
+            "en": "Cancel",
+            "de": "Abbrechen",
+            "it": "Annulla",
+            "nl": "Annuleren",
         }
     )
     return props.PropsUIPromptConfirm(text, ok, cancel)
