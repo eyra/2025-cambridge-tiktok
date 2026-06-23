@@ -374,14 +374,16 @@ def get_json_data_from_file(file_):
         return []
 
 
-def is_html_format(zip_file):
-    """True if the upload is a TikTok HTML-format export (zip of .html with no .json)."""
+def is_non_json_format(zip_file):
+    """True if the upload is a zip with no .json files.
+
+    TikTok exports are only available in JSON or TXT format. Any zip without
+    a .json file is therefore the wrong format (typically TXT) — we surface a
+    clear retry prompt instead of letting the extraction return empty.
+    """
     try:
         with zipfile.ZipFile(zip_file, "r") as zip:
-            namelist = zip.namelist()
-            has_html = any(name.lower().endswith(".html") for name in namelist)
-            has_json = any(name.lower().endswith(".json") for name in namelist)
-            return has_html and not has_json
+            return not any(name.lower().endswith(".json") for name in zip.namelist())
     except (zipfile.BadZipFile, IOError):
         return False
     finally:
@@ -1074,8 +1076,8 @@ def extract_tiktok_data(zip_file, locale="en", meta_data=None):
     if meta_data is None:
         meta_data = []
 
-    if is_html_format(zip_file):
-        raise HtmlFormatError("TikTok data export is in HTML format, JSON format is required")
+    if is_non_json_format(zip_file):
+        raise NonJsonFormatError("TikTok data export is not in JSON format, JSON format is required")
 
     extractors = [
         extract_summary_data,
@@ -1114,8 +1116,8 @@ class InvalidFileError(Exception):
     """Indicates that the file does not match expectations."""
 
 
-class HtmlFormatError(Exception):
-    """Indicates the upload is a TikTok HTML-format export (JSON is required)."""
+class NonJsonFormatError(Exception):
+    """Indicates the upload is not in JSON format (TikTok exports are JSON or TXT)."""
 
 
 class SkipToNextStep(Exception):
@@ -1150,11 +1152,11 @@ class DataDonationProcessor:
                         continue
                     else:
                         return
-                except HtmlFormatError:
-                    self.log(f"HTML format detected - prompting for retry with instructions")
-                    if (yield from self.prompt_html_format_retry()):
+                except NonJsonFormatError:
+                    self.log(f"non-JSON format detected - prompting for retry with instructions")
+                    if (yield from self.prompt_non_json_format_retry()):
                         continue
-                    yield donate(f"{self.session_id}-html-format-attempt", '[{ "message": "HTML format upload attempted" }]')
+                    yield donate(f"{self.session_id}-non-json-format-attempt", '[{ "message": "Non-JSON format upload attempted" }]')
                     return
                 else:
                     if extraction_result is None:
@@ -1173,9 +1175,9 @@ class DataDonationProcessor:
         )
         return retry_result.__type__ == "PayloadTrue"
 
-    def prompt_html_format_retry(self):
+    def prompt_non_json_format_retry(self):
         retry_result = yield render_donation_page(
-            self.platform, [html_format_retry_confirmation(self.platform)]
+            self.platform, [non_json_format_retry_confirmation(self.platform)]
         )
         return retry_result.__type__ == "PayloadTrue"
 
@@ -1339,13 +1341,13 @@ def retry_confirmation(platform):
     return props.PropsUIPromptConfirm(text, ok, cancel)
 
 
-def html_format_retry_confirmation(platform):
+def non_json_format_retry_confirmation(platform):
     text = props.Translatable(
         {
-            "en": "The uploaded file contains TikTok data in HTML format, but we need JSON format. Please re-download your data from TikTok and select JSON as the file format.",
-            "de": "Die hochgeladene Datei enthält TikTok-Daten im HTML-Format, aber wir benötigen das JSON-Format. Bitte laden Sie Ihre Daten erneut von TikTok herunter und wählen Sie JSON als Dateiformat aus.",
-            "it": "Il file caricato contiene dati TikTok in formato HTML, ma abbiamo bisogno del formato JSON. Scarica di nuovo i tuoi dati da TikTok e seleziona JSON come formato del file.",
-            "nl": "Het geüploade bestand bevat TikTok-gegevens in HTML-formaat, maar we hebben JSON-formaat nodig. Download je gegevens opnieuw van TikTok en selecteer JSON als bestandsformaat.",
+            "en": "The uploaded file is not in JSON format. Please re-download your data from TikTok and select JSON as the file format.",
+            "de": "Die hochgeladene Datei liegt nicht im JSON-Format vor. Bitte laden Sie Ihre Daten erneut von TikTok herunter und wählen Sie JSON als Dateiformat aus.",
+            "it": "Il file caricato non è in formato JSON. Scarica di nuovo i tuoi dati da TikTok e seleziona JSON come formato del file.",
+            "nl": "Het geüploade bestand is niet in JSON-formaat. Download je gegevens opnieuw van TikTok en selecteer JSON als bestandsformaat.",
         }
     )
     ok = props.Translatable(
