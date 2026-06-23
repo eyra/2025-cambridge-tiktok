@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 from port.script import (
     extract_tiktok_data,
     ExtractionResult,
-    HtmlFormatError,
+    NonJsonFormatError,
     get_json_data_from_file,
-    is_html_format,
+    is_non_json_format,
     parse_datetime,
 )
 
@@ -381,6 +381,16 @@ def test_parse_datetime_unknown_format_raises():
         parse_datetime("23/04/2025 10:26:35")
 
 
+def _make_txt_zip():
+    """A zip that mimics a TikTok TXT-format export (only .txt files)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("Profile.txt", "username: testuser\n")
+        zf.writestr("Comments.txt", "no comments\n")
+    buf.seek(0)
+    return buf
+
+
 def _make_html_zip():
     """A zip that mimics a TikTok HTML-format export (only .html files)."""
     buf = io.BytesIO()
@@ -391,21 +401,29 @@ def _make_html_zip():
     return buf
 
 
-def test_is_html_format_true_when_only_html():
-    assert is_html_format(_make_html_zip()) is True
+def test_is_non_json_format_true_for_txt_zip():
+    assert is_non_json_format(_make_txt_zip()) is True
 
 
-def test_is_html_format_false_when_json_present():
-    # Standard JSON export — no .html, only .json
-    assert is_html_format(create_test_zip(create_full_test_data())) is False
+def test_is_non_json_format_true_for_html_zip():
+    assert is_non_json_format(_make_html_zip()) is True
 
 
-def test_is_html_format_false_for_non_zip():
-    """A plain JSON file (not a zip) shouldn't trip the HTML gate."""
+def test_is_non_json_format_false_when_json_present():
+    assert is_non_json_format(create_test_zip(create_full_test_data())) is False
+
+
+def test_is_non_json_format_false_for_non_zip():
+    """A plain JSON file (not a zip) shouldn't trip the format gate."""
     buf = io.BytesIO(json.dumps(create_full_test_data()).encode())
-    assert is_html_format(buf) is False
+    assert is_non_json_format(buf) is False
+
+
+def test_extract_tiktok_data_raises_on_txt_format():
+    with pytest.raises(NonJsonFormatError):
+        extract_tiktok_data(_make_txt_zip(), "en")
 
 
 def test_extract_tiktok_data_raises_on_html_format():
-    with pytest.raises(HtmlFormatError):
+    with pytest.raises(NonJsonFormatError):
         extract_tiktok_data(_make_html_zip(), "en")
