@@ -48,11 +48,6 @@ class ScriptWrapper(Generator):
         raise StopIteration
 
 
-# CAMBRIDGE-FORK: This file diverges from upstream Feldspar — `data` is a
-# {sessionId, locale} dict rather than a bare sessionId int. See the matching
-# divergences in py_worker.js, assembly.ts, worker_engine.ts,
-# script_host_component.tsx, and port/script.py `process(data)`. When syncing
-# feldspar/develop, keep this signature.
 def start(data):
     script = process(data)
     wrapper = ScriptWrapper(script)

@@ -40,11 +40,6 @@ const FeldsparContent: React.FC<ScriptHostProps> = ({
     workerRef.current = worker;
 
     const run = (bridge: Bridge, selectedLocale: string = locale) => {
-      // CAMBRIDGE-FORK: Pass `selectedLocale` to Assembly so it can thread the
-      // locale through WorkerProcessingEngine to the Python worker. Upstream
-      // Feldspar does not pass locale here. See port/script.py `process(data)`,
-      // port/main.py, py_worker.js, assembly.ts, worker_engine.ts for the
-      // matching divergences. When syncing feldspar/develop, keep all five.
       const assembly = new Assembly(worker, bridge, selectedLocale, factories, logLevel);
       assembly.visualizationEngine.start(
         containerRef.current!,

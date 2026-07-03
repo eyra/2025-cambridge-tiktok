@@ -33,7 +33,6 @@ class FakeHandler implements CommandHandler {
 function makeEngine (): { engine: WorkerProcessingEngine, logger: FakeLogger, worker: FakeWorker } {
   const worker = new FakeWorker()
   const logger = new FakeLogger()
-  // CAMBRIDGE-FORK: `locale` is the 2nd positional arg — see worker_engine.ts class comment.
   const engine = new WorkerProcessingEngine('s1', 'en', worker as unknown as Worker, new FakeHandler(), logger)
   return { engine, logger, worker }
 }

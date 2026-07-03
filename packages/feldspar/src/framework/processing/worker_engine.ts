@@ -8,13 +8,6 @@ function toLogLevel (value: unknown): LogLevel {
   return VALID_LOG_LEVELS.includes(value as LogLevel) ? (value as LogLevel) : 'info'
 }
 
-// CAMBRIDGE-FORK: This file diverges from upstream Feldspar — `locale` is
-// threaded through to the Python worker so the donation script can localize
-// DataFrame column headers. The constructor accepts a `locale` and
-// `firstRunCycle` posts `data: {sessionId, locale}` instead of just
-// `sessionId`. See port/script.py `process(data)`, port/main.py `start(data)`,
-// py_worker.js (event.data.data), assembly.ts, and script_host_component.tsx
-// for the matching divergences. When syncing feldspar/develop, keep all five.
 export default class WorkerProcessingEngine {
   sessionId: String
   locale: String
@@ -111,8 +104,6 @@ export default class WorkerProcessingEngine {
   }
 
   firstRunCycle (): void {
-    // CAMBRIDGE-FORK: nested `data: {sessionId, locale}` instead of upstream's
-    // flat `sessionId` — see class-level comment.
     this.worker.postMessage({
       eventType: 'firstRunCycle',
       data: { sessionId: this.sessionId, locale: this.locale }

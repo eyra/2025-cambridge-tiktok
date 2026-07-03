@@ -13,10 +13,6 @@ onmessage = (event) => {
       break;
 
     case "firstRunCycle":
-      // CAMBRIDGE-FORK: Pass a {sessionId, locale} dict via event.data.data so
-      // port.start receives the locale alongside sessionId. Upstream sends only
-      // a bare sessionId. See port/main.py, assembly.ts, worker_engine.ts,
-      // script_host_component.tsx for the matching divergences.
       pyScript = self.pyodide.runPython(`port.start(${JSON.stringify(event.data.data)})`);
       runCycle(null);
       break;
